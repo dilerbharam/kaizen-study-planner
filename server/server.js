@@ -40,7 +40,10 @@ app.get("/test-db", async (req, res) => {
       time: result.rows[0].now,
     });
   } catch (error) {
-    console.error("Database connection test failed:", error);
+    console.error(
+      "Database connection test failed:",
+      error
+    );
 
     return res.status(500).json({
       error: "Database connection failed",
@@ -76,56 +79,62 @@ app.get("/api/goals/:userId", async (req, res) => {
 /*
  * Retrieves a goal with its milestones and topics.
  */
-app.get("/api/goals/:goalId/details", async (req, res) => {
-  try {
-    const { goalId } = req.params;
+app.get(
+  "/api/goals/:goalId/details",
+  async (req, res) => {
+    try {
+      const { goalId } = req.params;
 
-    const goalResult = await pool.query(
-      `SELECT *
-       FROM goals
-       WHERE id = $1`,
-      [goalId]
-    );
+      const goalResult = await pool.query(
+        `SELECT *
+         FROM goals
+         WHERE id = $1`,
+        [goalId]
+      );
 
-    if (goalResult.rows.length === 0) {
-      return res.status(404).json({
-        error: "Goal not found",
+      if (goalResult.rows.length === 0) {
+        return res.status(404).json({
+          error: "Goal not found",
+        });
+      }
+
+      const milestonesResult = await pool.query(
+        `SELECT *
+         FROM milestones
+         WHERE goal_id = $1
+         ORDER BY sequence_order`,
+        [goalId]
+      );
+
+      const topicsResult = await pool.query(
+        `SELECT topics.*
+         FROM topics
+         JOIN milestones
+           ON topics.milestone_id = milestones.id
+         WHERE milestones.goal_id = $1
+         ORDER BY
+           milestones.sequence_order,
+           topics.sequence_order`,
+        [goalId]
+      );
+
+      return res.json({
+        goal: goalResult.rows[0],
+        milestones: milestonesResult.rows,
+        topics: topicsResult.rows,
+      });
+    } catch (error) {
+      console.error(
+        "Failed to fetch goal details:",
+        error
+      );
+
+      return res.status(500).json({
+        error: "Failed to fetch goal details",
       });
     }
-
-    const milestonesResult = await pool.query(
-      `SELECT *
-       FROM milestones
-       WHERE goal_id = $1
-       ORDER BY sequence_order`,
-      [goalId]
-    );
-
-    const topicsResult = await pool.query(
-      `SELECT topics.*
-       FROM topics
-       JOIN milestones
-         ON topics.milestone_id = milestones.id
-       WHERE milestones.goal_id = $1
-       ORDER BY
-         milestones.sequence_order,
-         topics.sequence_order`,
-      [goalId]
-    );
-
-    return res.json({
-      goal: goalResult.rows[0],
-      milestones: milestonesResult.rows,
-      topics: topicsResult.rows,
-    });
-  } catch (error) {
-    console.error("Failed to fetch goal details:", error);
-
-    return res.status(500).json({
-      error: "Failed to fetch goal details",
-    });
   }
-});
+);
 
 /*
  * Creates a new learning goal.
@@ -145,7 +154,9 @@ app.post("/api/goals", async (req, res) => {
       });
     }
 
-    const parsedTargetDate = normaliseDate(targetDate);
+    const parsedTargetDate =
+      normaliseDate(targetDate);
+
     const today = normaliseDate(new Date());
 
     if (!parsedTargetDate) {
@@ -212,6 +223,7 @@ app.post(
   async (req, res) => {
     try {
       const { goalId } = req.params;
+
       const {
         title,
         sequenceOrder,
@@ -236,37 +248,43 @@ app.post(
         });
       }
 
-      const milestoneResult = await pool.query(
-        `INSERT INTO milestones
-          (
-            goal_id,
-            title,
-            sequence_order
-          )
-         VALUES (
-           $1,
-           $2,
-           COALESCE(
-             $3,
-             (
-               SELECT
-                 COALESCE(MAX(sequence_order), 0) + 1
-               FROM milestones
-               WHERE goal_id = $1
+      const milestoneResult =
+        await pool.query(
+          `INSERT INTO milestones
+            (
+              goal_id,
+              title,
+              sequence_order
+            )
+           VALUES (
+             $1,
+             $2,
+             COALESCE(
+               $3,
+               (
+                 SELECT
+                   COALESCE(
+                     MAX(sequence_order),
+                     0
+                   ) + 1
+                 FROM milestones
+                 WHERE goal_id = $1
+               )
              )
            )
-         )
-         RETURNING *`,
-        [
-          goalId,
-          title.trim(),
-          sequenceOrder || null,
-        ]
-      );
+           RETURNING *`,
+          [
+            goalId,
+            title.trim(),
+            sequenceOrder || null,
+          ]
+        );
 
       return res.status(201).json({
-        message: "Milestone created successfully.",
-        milestone: milestoneResult.rows[0],
+        message:
+          "Milestone created successfully.",
+        milestone:
+          milestoneResult.rows[0],
       });
     } catch (error) {
       console.error(
@@ -296,7 +314,9 @@ app.post(
         sequenceOrder,
       } = req.body;
 
-      const minutes = Number(estimatedMinutes);
+      const minutes = Number(
+        estimatedMinutes
+      );
 
       if (!title?.trim()) {
         return res.status(400).json({
@@ -314,14 +334,17 @@ app.post(
         });
       }
 
-      const milestoneResult = await pool.query(
-        `SELECT id
-         FROM milestones
-         WHERE id = $1`,
-        [milestoneId]
-      );
+      const milestoneResult =
+        await pool.query(
+          `SELECT id
+           FROM milestones
+           WHERE id = $1`,
+          [milestoneId]
+        );
 
-      if (milestoneResult.rows.length === 0) {
+      if (
+        milestoneResult.rows.length === 0
+      ) {
         return res.status(404).json({
           error: "Milestone not found.",
         });
@@ -343,7 +366,10 @@ app.post(
              $4,
              (
                SELECT
-                 COALESCE(MAX(sequence_order), 0) + 1
+                 COALESCE(
+                   MAX(sequence_order),
+                   0
+                 ) + 1
                FROM topics
                WHERE milestone_id = $1
              )
@@ -363,7 +389,10 @@ app.post(
         topic: topicResult.rows[0],
       });
     } catch (error) {
-      console.error("Failed to create topic:", error);
+      console.error(
+        "Failed to create topic:",
+        error
+      );
 
       return res.status(500).json({
         error: "Failed to create topic.",
@@ -373,47 +402,64 @@ app.post(
 );
 
 /*
- * Retrieves a user's weekly availability.
+ * Retrieves weekly availability for a specific goal.
  */
 app.get(
-  "/api/users/:userId/availability",
+  "/api/goals/:goalId/availability",
   async (req, res) => {
     try {
-      const { userId } = req.params;
+      const { goalId } = req.params;
 
-      const availabilityResult = await pool.query(
-        `SELECT *
-         FROM availability
-         WHERE user_id = $1
-         ORDER BY id`,
-        [userId]
+      const goalResult = await pool.query(
+        `SELECT id
+         FROM goals
+         WHERE id = $1`,
+        [goalId]
       );
 
-      return res.json(availabilityResult.rows);
+      if (goalResult.rows.length === 0) {
+        return res.status(404).json({
+          error: "Goal not found.",
+        });
+      }
+
+      const availabilityResult =
+        await pool.query(
+          `SELECT *
+           FROM availability
+           WHERE goal_id = $1
+           ORDER BY id`,
+          [goalId]
+        );
+
+      return res.json(
+        availabilityResult.rows
+      );
     } catch (error) {
       console.error(
-        "Failed to fetch availability:",
+        "Failed to fetch goal availability:",
         error
       );
 
       return res.status(500).json({
-        error: "Failed to fetch availability.",
+        error:
+          "Failed to fetch goal availability.",
       });
     }
   }
 );
 
 /*
- * Replaces a user's weekly availability.
+ * Replaces weekly availability for a specific goal.
  */
 app.put(
-  "/api/users/:userId/availability",
+  "/api/goals/:goalId/availability",
   async (req, res) => {
     const client = await pool.connect();
     let transactionStarted = false;
 
     try {
-      const { userId } = req.params;
+      const { goalId } = req.params;
       const { availability } = req.body;
 
       const validation =
@@ -431,22 +477,28 @@ app.put(
         )
       );
 
-      if (uniqueDays.size !== availability.length) {
+      if (
+        uniqueDays.size !==
+        availability.length
+      ) {
         return res.status(400).json({
-          error: "Each weekday can only appear once.",
+          error:
+            "Each weekday can only appear once.",
         });
       }
 
-      const userResult = await client.query(
-        `SELECT id
-         FROM users
+      const goalResult = await client.query(
+        `SELECT id, user_id
+         FROM goals
          WHERE id = $1`,
-        [userId]
+        [goalId]
       );
 
-      if (userResult.rows.length === 0) {
+      const goal = goalResult.rows[0];
+
+      if (!goal) {
         return res.status(404).json({
-          error: "User not found.",
+          error: "Goal not found.",
         });
       }
 
@@ -455,28 +507,33 @@ app.put(
 
       await client.query(
         `DELETE FROM availability
-         WHERE user_id = $1`,
-        [userId]
+         WHERE goal_id = $1`,
+        [goalId]
       );
 
       const savedAvailability = [];
 
       for (const entry of availability) {
-        const availabilityResult = await client.query(
-          `INSERT INTO availability
-            (
-              user_id,
-              day_of_week,
-              available_minutes
-            )
-           VALUES ($1, $2, $3)
-           RETURNING *`,
-          [
-            userId,
-            entry.day_of_week,
-            Number(entry.available_minutes),
-          ]
-        );
+        const availabilityResult =
+          await client.query(
+            `INSERT INTO availability
+              (
+                user_id,
+                goal_id,
+                day_of_week,
+                available_minutes
+              )
+             VALUES ($1, $2, $3, $4)
+             RETURNING *`,
+            [
+              goal.user_id,
+              goalId,
+              entry.day_of_week,
+              Number(
+                entry.available_minutes
+              ),
+            ]
+          );
 
         savedAvailability.push(
           availabilityResult.rows[0]
@@ -488,7 +545,7 @@ app.put(
 
       return res.json({
         message:
-          "Availability updated successfully.",
+          "Goal availability updated successfully.",
         availability: savedAvailability,
       });
     } catch (error) {
@@ -497,12 +554,13 @@ app.put(
       }
 
       console.error(
-        "Failed to update availability:",
+        "Failed to update goal availability:",
         error
       );
 
       return res.status(500).json({
-        error: "Failed to update availability.",
+        error:
+          "Failed to update goal availability.",
       });
     } finally {
       client.release();
@@ -537,7 +595,10 @@ app.post(
         });
       }
 
-      const today = normaliseDate(new Date());
+      const today = normaliseDate(
+        new Date()
+      );
+
       const targetDate = normaliseDate(
         goal.target_date
       );
@@ -556,17 +617,19 @@ app.post(
         });
       }
 
-      const topicsResult = await client.query(
-        `SELECT topics.*
-         FROM topics
-         JOIN milestones
-           ON topics.milestone_id = milestones.id
-         WHERE milestones.goal_id = $1
-         ORDER BY
-           milestones.sequence_order,
-           topics.sequence_order`,
-        [goalId]
-      );
+      const topicsResult =
+        await client.query(
+          `SELECT topics.*
+           FROM topics
+           JOIN milestones
+             ON topics.milestone_id =
+                milestones.id
+           WHERE milestones.goal_id = $1
+           ORDER BY
+             milestones.sequence_order,
+             topics.sequence_order`,
+          [goalId]
+        );
 
       const topics = topicsResult.rows;
 
@@ -581,9 +644,9 @@ app.post(
         await client.query(
           `SELECT *
            FROM availability
-           WHERE user_id = $1
+           WHERE goal_id = $1
            ORDER BY id`,
-          [goal.user_id]
+          [goalId]
         );
 
       const availability =
@@ -592,9 +655,12 @@ app.post(
       const availabilityValidation =
         validateAvailability(availability);
 
-      if (!availabilityValidation.valid) {
+      if (
+        !availabilityValidation.valid
+      ) {
         return res.status(400).json({
-          error: availabilityValidation.error,
+          error:
+            availabilityValidation.error,
         });
       }
 
@@ -625,12 +691,13 @@ app.post(
         });
       }
 
-      const scheduleResult = createSchedule({
-        topics,
-        availability,
-        startDate: today,
-        targetDate,
-      });
+      const scheduleResult =
+        createSchedule({
+          topics,
+          availability,
+          startDate: today,
+          targetDate,
+        });
 
       if (!scheduleResult.complete) {
         return res.status(422).json({
@@ -651,7 +718,8 @@ app.post(
            SELECT topics.id
            FROM topics
            JOIN milestones
-             ON topics.milestone_id = milestones.id
+             ON topics.milestone_id =
+                milestones.id
            WHERE milestones.goal_id = $1
          )`,
         [goalId]
@@ -659,7 +727,9 @@ app.post(
 
       const generatedTasks = [];
 
-      for (const task of scheduleResult.tasks) {
+      for (
+        const task of scheduleResult.tasks
+      ) {
         const insertedTask =
           await client.query(
             `INSERT INTO tasks
@@ -692,7 +762,8 @@ app.post(
       return res.status(201).json({
         message:
           `${generatedTasks.length} tasks generated successfully`,
-        tasks_created: generatedTasks.length,
+        tasks_created:
+          generatedTasks.length,
         required_minutes:
           totalRequiredMinutes,
         available_minutes:
@@ -733,7 +804,8 @@ app.get(
          JOIN topics
            ON tasks.topic_id = topics.id
          JOIN milestones
-           ON topics.milestone_id = milestones.id
+           ON topics.milestone_id =
+              milestones.id
          WHERE milestones.goal_id = $1
          ORDER BY
            tasks.scheduled_date,
@@ -779,17 +851,19 @@ app.get(
         });
       }
 
-      const topicsResult = await pool.query(
-        `SELECT topics.*
-         FROM topics
-         JOIN milestones
-           ON topics.milestone_id = milestones.id
-         WHERE milestones.goal_id = $1
-         ORDER BY
-           milestones.sequence_order,
-           topics.sequence_order`,
-        [goalId]
-      );
+      const topicsResult =
+        await pool.query(
+          `SELECT topics.*
+           FROM topics
+           JOIN milestones
+             ON topics.milestone_id =
+                milestones.id
+           WHERE milestones.goal_id = $1
+           ORDER BY
+             milestones.sequence_order,
+             topics.sequence_order`,
+          [goalId]
+        );
 
       const tasksResult = await pool.query(
         `SELECT tasks.*
@@ -797,7 +871,8 @@ app.get(
          JOIN topics
            ON tasks.topic_id = topics.id
          JOIN milestones
-           ON topics.milestone_id = milestones.id
+           ON topics.milestone_id =
+              milestones.id
          WHERE milestones.goal_id = $1
          ORDER BY
            tasks.scheduled_date,
@@ -809,9 +884,9 @@ app.get(
         await pool.query(
           `SELECT *
            FROM availability
-           WHERE user_id = $1
+           WHERE goal_id = $1
            ORDER BY id`,
-          [goal.user_id]
+          [goalId]
         );
 
       const progress =
@@ -875,6 +950,29 @@ app.patch(
         });
       }
 
+      const taskResult = await pool.query(
+        `SELECT *
+         FROM tasks
+         WHERE id = $1`,
+        [taskId]
+      );
+
+      const existingTask =
+        taskResult.rows[0];
+
+      if (!existingTask) {
+        return res.status(404).json({
+          error: "Task not found",
+        });
+      }
+
+      if (existingTask.status !== "pending") {
+        return res.status(409).json({
+          error:
+            "Only pending tasks can have their status updated.",
+        });
+      }
+
       const updatedTaskResult =
         await pool.query(
           `UPDATE tasks
@@ -883,14 +981,6 @@ app.patch(
            RETURNING *`,
           [status, taskId]
         );
-
-      if (
-        updatedTaskResult.rows.length === 0
-      ) {
-        return res.status(404).json({
-          error: "Task not found",
-        });
-      }
 
       return res.json({
         message:
@@ -934,7 +1024,8 @@ app.post(
            JOIN topics
              ON tasks.topic_id = topics.id
            JOIN milestones
-             ON topics.milestone_id = milestones.id
+             ON topics.milestone_id =
+                milestones.id
            JOIN goals
              ON milestones.goal_id = goals.id
            WHERE tasks.id = $1`,
@@ -950,7 +1041,9 @@ app.post(
         });
       }
 
-      if (skippedTask.status !== "skipped") {
+      if (
+        skippedTask.status !== "skipped"
+      ) {
         return res.status(400).json({
           error:
             "Only skipped tasks can be rescheduled.",
@@ -985,9 +1078,9 @@ app.post(
         await client.query(
           `SELECT *
            FROM availability
-           WHERE user_id = $1
+           WHERE goal_id = $1
            ORDER BY id`,
-          [skippedTask.user_id]
+          [skippedTask.goal_id]
         );
 
       const availability =
@@ -996,22 +1089,28 @@ app.post(
       const availabilityValidation =
         validateAvailability(availability);
 
-      if (!availabilityValidation.valid) {
+      if (
+        !availabilityValidation.valid
+      ) {
         return res.status(400).json({
           error:
             availabilityValidation.error,
         });
       }
 
-      const targetDate = normaliseDate(
-        skippedTask.target_date
-      );
+      const targetDate =
+        normaliseDate(
+          skippedTask.target_date
+        );
 
-      const skippedDate = normaliseDate(
-        skippedTask.scheduled_date
-      );
+      const skippedDate =
+        normaliseDate(
+          skippedTask.scheduled_date
+        );
 
-      const today = normaliseDate(new Date());
+      const today = normaliseDate(
+        new Date()
+      );
 
       if (
         !targetDate ||
@@ -1044,7 +1143,8 @@ app.post(
            JOIN topics
              ON tasks.topic_id = topics.id
            JOIN milestones
-             ON topics.milestone_id = milestones.id
+             ON topics.milestone_id =
+                milestones.id
            WHERE milestones.goal_id = $1
              AND tasks.status = 'pending'
              AND (
@@ -1084,13 +1184,16 @@ app.post(
            JOIN topics
              ON tasks.topic_id = topics.id
            JOIN milestones
-             ON topics.milestone_id = milestones.id
+             ON topics.milestone_id =
+                milestones.id
            WHERE milestones.goal_id = $1
              AND tasks.status <> 'skipped'
              AND NOT (
-               tasks.id = ANY($2::int[])
+               tasks.id =
+               ANY($2::int[])
              )
-           GROUP BY tasks.scheduled_date`,
+           GROUP BY
+             tasks.scheduled_date`,
           [
             skippedTask.goal_id,
             tasksToRebalanceIds,
@@ -1100,9 +1203,10 @@ app.post(
       const workloadByDate = new Map(
         protectedWorkloadResult.rows.map(
           (row) => {
-            const date = normaliseDate(
-              row.scheduled_date
-            );
+            const date =
+              normaliseDate(
+                row.scheduled_date
+              );
 
             return [
               formatDate(date),
@@ -1140,7 +1244,9 @@ app.post(
           (task) => task.id
         );
 
-      if (futurePendingIds.length > 0) {
+      if (
+        futurePendingIds.length > 0
+      ) {
         await client.query(
           `DELETE FROM tasks
            WHERE id = ANY($1::int[])`,
@@ -1151,7 +1257,8 @@ app.post(
       const rebuiltTasks = [];
 
       for (
-        const task of rebalanceResult.tasks
+        const task of
+          rebalanceResult.tasks
       ) {
         const insertedTask =
           await client.query(
@@ -1189,7 +1296,8 @@ app.post(
           skippedTask,
         removed_future_tasks:
           futurePendingIds.length,
-        rebuilt_tasks: rebuiltTasks,
+        rebuilt_tasks:
+          rebuiltTasks,
       });
     } catch (error) {
       if (transactionStarted) {

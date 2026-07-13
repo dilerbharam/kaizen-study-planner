@@ -21,27 +21,40 @@ const createEmptyMilestone = () => ({
   topics: [createEmptyTopic()],
 });
 
-function GoalSetupForm({ userId, onGoalCreated, onCancel }) {
+function GoalSetupForm({
+  userId,
+  onGoalCreated,
+  onCancel,
+}) {
   const [title, setTitle] = useState("");
-  const [targetDate, setTargetDate] = useState("");
+  const [targetDate, setTargetDate] =
+    useState("");
 
-  const [milestones, setMilestones] = useState([
-    createEmptyMilestone(),
-  ]);
+  const [milestones, setMilestones] =
+    useState([
+      createEmptyMilestone(),
+    ]);
 
-  const [availability, setAvailability] = useState(
-    WEEKDAYS.map((day) => ({
-      day_of_week: day,
-      enabled: false,
-      available_minutes: 60,
-    }))
-  );
+  const [availability, setAvailability] =
+    useState(
+      WEEKDAYS.map((day) => ({
+        day_of_week: day,
+        enabled: false,
+        available_minutes: 60,
+      }))
+    );
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [message, setMessage] = useState("");
-  const [messageType, setMessageType] = useState("");
+  const [isSubmitting, setIsSubmitting] =
+    useState(false);
+  const [message, setMessage] =
+    useState("");
+  const [messageType, setMessageType] =
+    useState("");
 
-  const updateMilestoneTitle = (milestoneIndex, value) => {
+  const updateMilestoneTitle = (
+    milestoneIndex,
+    value
+  ) => {
     setMilestones((current) =>
       current.map((milestone, index) =>
         index === milestoneIndex
@@ -61,9 +74,14 @@ function GoalSetupForm({ userId, onGoalCreated, onCancel }) {
     ]);
   };
 
-  const removeMilestone = (milestoneIndex) => {
+  const removeMilestone = (
+    milestoneIndex
+  ) => {
     setMilestones((current) =>
-      current.filter((_, index) => index !== milestoneIndex)
+      current.filter(
+        (_, index) =>
+          index !== milestoneIndex
+      )
     );
   };
 
@@ -90,46 +108,79 @@ function GoalSetupForm({ userId, onGoalCreated, onCancel }) {
     value
   ) => {
     setMilestones((current) =>
-      current.map((milestone, currentMilestoneIndex) => {
-        if (currentMilestoneIndex !== milestoneIndex) {
-          return milestone;
-        }
+      current.map(
+        (
+          milestone,
+          currentMilestoneIndex
+        ) => {
+          if (
+            currentMilestoneIndex !==
+            milestoneIndex
+          ) {
+            return milestone;
+          }
 
-        return {
-          ...milestone,
-          topics: milestone.topics.map(
-            (topic, currentTopicIndex) =>
-              currentTopicIndex === topicIndex
-                ? {
-                    ...topic,
-                    [field]: value,
-                  }
-                : topic
-          ),
-        };
-      })
+          return {
+            ...milestone,
+            topics:
+              milestone.topics.map(
+                (
+                  topic,
+                  currentTopicIndex
+                ) =>
+                  currentTopicIndex ===
+                  topicIndex
+                    ? {
+                        ...topic,
+                        [field]: value,
+                      }
+                    : topic
+              ),
+          };
+        }
+      )
     );
   };
 
-  const removeTopic = (milestoneIndex, topicIndex) => {
+  const removeTopic = (
+    milestoneIndex,
+    topicIndex
+  ) => {
     setMilestones((current) =>
-      current.map((milestone, currentMilestoneIndex) => {
-        if (currentMilestoneIndex !== milestoneIndex) {
-          return milestone;
-        }
+      current.map(
+        (
+          milestone,
+          currentMilestoneIndex
+        ) => {
+          if (
+            currentMilestoneIndex !==
+            milestoneIndex
+          ) {
+            return milestone;
+          }
 
-        return {
-          ...milestone,
-          topics: milestone.topics.filter(
-            (_, currentTopicIndex) =>
-              currentTopicIndex !== topicIndex
-          ),
-        };
-      })
+          return {
+            ...milestone,
+            topics:
+              milestone.topics.filter(
+                (
+                  _,
+                  currentTopicIndex
+                ) =>
+                  currentTopicIndex !==
+                  topicIndex
+              ),
+          };
+        }
+      )
     );
   };
 
-  const updateAvailability = (dayIndex, field, value) => {
+  const updateAvailability = (
+    dayIndex,
+    field,
+    value
+  ) => {
     setAvailability((current) =>
       current.map((day, index) =>
         index === dayIndex
@@ -151,7 +202,10 @@ function GoalSetupForm({ userId, onGoalCreated, onCancel }) {
       return "A target date is required.";
     }
 
-    const parsedTargetDate = new Date(`${targetDate}T00:00:00`);
+    const parsedTargetDate = new Date(
+      `${targetDate}T00:00:00`
+    );
+
     const today = new Date();
 
     today.setHours(0, 0, 0, 0);
@@ -169,7 +223,9 @@ function GoalSetupForm({ userId, onGoalCreated, onCancel }) {
         return "Every milestone must have a title.";
       }
 
-      if (milestone.topics.length === 0) {
+      if (
+        milestone.topics.length === 0
+      ) {
         return `Milestone "${milestone.title}" requires at least one topic.`;
       }
 
@@ -178,27 +234,42 @@ function GoalSetupForm({ userId, onGoalCreated, onCancel }) {
           return "Every topic must have a title.";
         }
 
-        const minutes = Number(topic.estimatedMinutes);
+        const minutes = Number(
+          topic.estimatedMinutes
+        );
 
-        if (!Number.isInteger(minutes) || minutes <= 0) {
+        if (
+          !Number.isInteger(minutes) ||
+          minutes <= 0
+        ) {
           return "Every topic duration must be a positive whole number.";
         }
       }
     }
 
-    const selectedAvailability = availability.filter(
-      (day) => day.enabled
-    );
+    const selectedAvailability =
+      availability.filter(
+        (day) => day.enabled
+      );
 
-    if (selectedAvailability.length === 0) {
+    if (
+      selectedAvailability.length === 0
+    ) {
       return "Select at least one available study day.";
     }
 
-    const invalidAvailability = selectedAvailability.find(
-      (day) =>
-        !Number.isInteger(Number(day.available_minutes)) ||
-        Number(day.available_minutes) <= 0
-    );
+    const invalidAvailability =
+      selectedAvailability.find(
+        (day) =>
+          !Number.isInteger(
+            Number(
+              day.available_minutes
+            )
+          ) ||
+          Number(
+            day.available_minutes
+          ) <= 0
+      );
 
     if (invalidAvailability) {
       return "Available minutes must be positive whole numbers.";
@@ -213,7 +284,8 @@ function GoalSetupForm({ userId, onGoalCreated, onCancel }) {
     setMessage("");
     setMessageType("");
 
-    const validationError = validateForm();
+    const validationError =
+      validateForm();
 
     if (validationError) {
       setMessage(validationError);
@@ -224,72 +296,109 @@ function GoalSetupForm({ userId, onGoalCreated, onCancel }) {
     setIsSubmitting(true);
 
     try {
-      const selectedAvailability = availability
-        .filter((day) => day.enabled)
-        .map((day) => ({
-          day_of_week: day.day_of_week,
-          available_minutes: Number(
-            day.available_minutes
-          ),
-        }));
+      const selectedAvailability =
+        availability
+          .filter(
+            (day) => day.enabled
+          )
+          .map((day) => ({
+            day_of_week:
+              day.day_of_week,
+            available_minutes: Number(
+              day.available_minutes
+            ),
+          }));
 
-      await api.put(
-        `/api/users/${userId}/availability`,
-        {
-          availability: selectedAvailability,
-        }
-      );
-
-      const goalResponse = await api.post("/api/goals", {
-        userId,
-        title: title.trim(),
-        targetDate,
-      });
-
-      const createdGoal = goalResponse.data.goal;
-
-      for (
-        let milestoneIndex = 0;
-        milestoneIndex < milestones.length;
-        milestoneIndex += 1
-      ) {
-        const milestone = milestones[milestoneIndex];
-
-        const milestoneResponse = await api.post(
-          `/api/goals/${createdGoal.id}/milestones`,
+      /*
+       * The goal must be created first because
+       * availability is now stored against goal_id.
+       */
+      const goalResponse =
+        await api.post(
+          "/api/goals",
           {
-            title: milestone.title.trim(),
-            sequenceOrder: milestoneIndex + 1,
+            userId,
+            title: title.trim(),
+            targetDate,
           }
         );
 
+      const createdGoal =
+        goalResponse.data.goal;
+
+      /*
+       * Save availability for this specific goal.
+       */
+      await api.put(
+        `/api/goals/${createdGoal.id}/availability`,
+        {
+          availability:
+            selectedAvailability,
+        }
+      );
+
+      /*
+       * Create ordered milestones and topics.
+       */
+      for (
+        let milestoneIndex = 0;
+        milestoneIndex <
+        milestones.length;
+        milestoneIndex += 1
+      ) {
+        const milestone =
+          milestones[milestoneIndex];
+
+        const milestoneResponse =
+          await api.post(
+            `/api/goals/${createdGoal.id}/milestones`,
+            {
+              title:
+                milestone.title.trim(),
+              sequenceOrder:
+                milestoneIndex + 1,
+            }
+          );
+
         const createdMilestone =
-          milestoneResponse.data.milestone;
+          milestoneResponse.data
+            .milestone;
 
         for (
           let topicIndex = 0;
-          topicIndex < milestone.topics.length;
+          topicIndex <
+          milestone.topics.length;
           topicIndex += 1
         ) {
-          const topic = milestone.topics[topicIndex];
+          const topic =
+            milestone.topics[
+              topicIndex
+            ];
 
           await api.post(
             `/api/milestones/${createdMilestone.id}/topics`,
             {
-              title: topic.title.trim(),
-              estimatedMinutes: Number(
-                topic.estimatedMinutes
-              ),
-              sequenceOrder: topicIndex + 1,
+              title:
+                topic.title.trim(),
+              estimatedMinutes:
+                Number(
+                  topic.estimatedMinutes
+                ),
+              sequenceOrder:
+                topicIndex + 1,
             }
           );
         }
       }
 
-      setMessage("Learning plan created successfully.");
+      setMessage(
+        "Learning plan created successfully."
+      );
       setMessageType("success");
 
-      await onGoalCreated(createdGoal.id);
+      await onGoalCreated(
+        createdGoal.id
+      );
     } catch (error) {
       setMessage(
         error.response?.data?.error ||
@@ -305,9 +414,13 @@ function GoalSetupForm({ userId, onGoalCreated, onCancel }) {
     <section className="card setup-card">
       <div className="section-header">
         <div>
-          <h2>Create a Learning Plan</h2>
+          <h2>
+            Create a Learning Plan
+          </h2>
+
           <p>
-            Define the goal, learning structure and weekly
+            Define the goal, learning
+            structure and weekly
             availability.
           </p>
         </div>
@@ -324,7 +437,9 @@ function GoalSetupForm({ userId, onGoalCreated, onCancel }) {
       </div>
 
       {message && (
-        <p className={`message ${messageType}`}>
+        <p
+          className={`message ${messageType}`}
+        >
           {message}
         </p>
       )}
@@ -333,11 +448,14 @@ function GoalSetupForm({ userId, onGoalCreated, onCancel }) {
         <div className="form-grid">
           <label>
             Goal title
+
             <input
               type="text"
               value={title}
               onChange={(event) =>
-                setTitle(event.target.value)
+                setTitle(
+                  event.target.value
+                )
               }
               placeholder="For example: Learn Java programming"
               disabled={isSubmitting}
@@ -346,11 +464,14 @@ function GoalSetupForm({ userId, onGoalCreated, onCancel }) {
 
           <label>
             Target date
+
             <input
               type="date"
               value={targetDate}
               onChange={(event) =>
-                setTargetDate(event.target.value)
+                setTargetDate(
+                  event.target.value
+                )
               }
               disabled={isSubmitting}
             />
@@ -360,10 +481,15 @@ function GoalSetupForm({ userId, onGoalCreated, onCancel }) {
         <div className="form-section">
           <div className="section-header">
             <div>
-              <h3>Milestones and Topics</h3>
+              <h3>
+                Milestones and Topics
+              </h3>
+
               <p>
-                Break the goal into ordered stages and
-                estimated learning topics.
+                Break the goal into
+                ordered stages and
+                estimated learning
+                topics.
               </p>
             </div>
 
@@ -377,24 +503,33 @@ function GoalSetupForm({ userId, onGoalCreated, onCancel }) {
           </div>
 
           {milestones.map(
-            (milestone, milestoneIndex) => (
+            (
+              milestone,
+              milestoneIndex
+            ) => (
               <div
                 className="milestone-editor"
                 key={`milestone-${milestoneIndex}`}
               >
                 <div className="editor-header">
                   <h4>
-                    Milestone {milestoneIndex + 1}
+                    Milestone{" "}
+                    {milestoneIndex + 1}
                   </h4>
 
-                  {milestones.length > 1 && (
+                  {milestones.length >
+                    1 && (
                     <button
                       type="button"
                       className="danger-button"
                       onClick={() =>
-                        removeMilestone(milestoneIndex)
+                        removeMilestone(
+                          milestoneIndex
+                        )
                       }
-                      disabled={isSubmitting}
+                      disabled={
+                        isSubmitting
+                      }
                     >
                       Remove Milestone
                     </button>
@@ -403,47 +538,70 @@ function GoalSetupForm({ userId, onGoalCreated, onCancel }) {
 
                 <label>
                   Milestone title
+
                   <input
                     type="text"
-                    value={milestone.title}
-                    onChange={(event) =>
+                    value={
+                      milestone.title
+                    }
+                    onChange={(
+                      event
+                    ) =>
                       updateMilestoneTitle(
                         milestoneIndex,
-                        event.target.value
+                        event.target
+                          .value
                       )
                     }
                     placeholder="For example: Programming fundamentals"
-                    disabled={isSubmitting}
+                    disabled={
+                      isSubmitting
+                    }
                   />
                 </label>
 
                 <div className="topic-editor-list">
                   {milestone.topics.map(
-                    (topic, topicIndex) => (
+                    (
+                      topic,
+                      topicIndex
+                    ) => (
                       <div
                         className="topic-editor"
                         key={`topic-${milestoneIndex}-${topicIndex}`}
                       >
                         <label>
-                          Topic {topicIndex + 1}
+                          Topic{" "}
+                          {topicIndex +
+                            1}
+
                           <input
                             type="text"
-                            value={topic.title}
-                            onChange={(event) =>
+                            value={
+                              topic.title
+                            }
+                            onChange={(
+                              event
+                            ) =>
                               updateTopic(
                                 milestoneIndex,
                                 topicIndex,
                                 "title",
-                                event.target.value
+                                event
+                                  .target
+                                  .value
                               )
                             }
                             placeholder="For example: Variables and data types"
-                            disabled={isSubmitting}
+                            disabled={
+                              isSubmitting
+                            }
                           />
                         </label>
 
                         <label>
                           Estimated minutes
+
                           <input
                             type="number"
                             min="1"
@@ -451,19 +609,28 @@ function GoalSetupForm({ userId, onGoalCreated, onCancel }) {
                             value={
                               topic.estimatedMinutes
                             }
-                            onChange={(event) =>
+                            onChange={(
+                              event
+                            ) =>
                               updateTopic(
                                 milestoneIndex,
                                 topicIndex,
                                 "estimatedMinutes",
-                                event.target.value
+                                event
+                                  .target
+                                  .value
                               )
                             }
-                            disabled={isSubmitting}
+                            disabled={
+                              isSubmitting
+                            }
                           />
                         </label>
 
-                        {milestone.topics.length > 1 && (
+                        {milestone
+                          .topics
+                          .length >
+                          1 && (
                           <button
                             type="button"
                             className="danger-button"
@@ -473,7 +640,9 @@ function GoalSetupForm({ userId, onGoalCreated, onCancel }) {
                                 topicIndex
                               )
                             }
-                            disabled={isSubmitting}
+                            disabled={
+                              isSubmitting
+                            }
                           >
                             Remove
                           </button>
@@ -487,7 +656,9 @@ function GoalSetupForm({ userId, onGoalCreated, onCancel }) {
                   type="button"
                   className="secondary-button"
                   onClick={() =>
-                    addTopic(milestoneIndex)
+                    addTopic(
+                      milestoneIndex
+                    )
                   }
                   disabled={isSubmitting}
                 >
@@ -499,59 +670,88 @@ function GoalSetupForm({ userId, onGoalCreated, onCancel }) {
         </div>
 
         <div className="form-section">
-          <h3>Weekly Availability</h3>
+          <h3>
+            Weekly Availability
+          </h3>
 
           <p>
-            Select the study days and maximum number of minutes
+            Select the study days and
+            maximum number of minutes
             available on each day.
           </p>
 
           <div className="availability-grid">
-            {availability.map((day, dayIndex) => (
-              <div
-                className={`availability-row ${
-                  day.enabled ? "selected" : ""
-                }`}
-                key={day.day_of_week}
-              >
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={day.enabled}
-                    onChange={(event) =>
-                      updateAvailability(
-                        dayIndex,
-                        "enabled",
-                        event.target.checked
-                      )
-                    }
-                    disabled={isSubmitting}
-                  />
+            {availability.map(
+              (day, dayIndex) => (
+                <div
+                  className={`availability-row ${
+                    day.enabled
+                      ? "selected"
+                      : ""
+                  }`}
+                  key={
+                    day.day_of_week
+                  }
+                >
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={
+                        day.enabled
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateAvailability(
+                          dayIndex,
+                          "enabled",
+                          event
+                            .target
+                            .checked
+                        )
+                      }
+                      disabled={
+                        isSubmitting
+                      }
+                    />
 
-                  <span>{day.day_of_week}</span>
-                </label>
+                    <span>
+                      {
+                        day.day_of_week
+                      }
+                    </span>
+                  </label>
 
-                <label>
-                  Minutes
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={day.available_minutes}
-                    onChange={(event) =>
-                      updateAvailability(
-                        dayIndex,
-                        "available_minutes",
-                        event.target.value
-                      )
-                    }
-                    disabled={
-                      !day.enabled || isSubmitting
-                    }
-                  />
-                </label>
-              </div>
-            ))}
+                  <label>
+                    Minutes
+
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={
+                        day.available_minutes
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateAvailability(
+                          dayIndex,
+                          "available_minutes",
+                          event
+                            .target
+                            .value
+                        )
+                      }
+                      disabled={
+                        !day.enabled ||
+                        isSubmitting
+                      }
+                    />
+                  </label>
+                </div>
+              )
+            )}
           </div>
         </div>
 
