@@ -105,3 +105,123 @@ button:hover {
   padding: 10px;
   border-radius: 6px;
 }
+.main-header,
+.section-header,
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.form-section {
+  margin-top: 2rem;
+}
+
+.setup-card label,
+.goal-selector-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+
+.setup-card input,
+.goal-selector-card select {
+  padding: 0.75rem;
+  border: 1px solid #c7c7c7;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.milestone-editor {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid #dddddd;
+  border-radius: 10px;
+  background: #fafafa;
+}
+
+.topic-editor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin: 1rem 0;
+}
+
+.topic-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px auto;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.availability-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.availability-row {
+  display: grid;
+  grid-template-columns: 1fr 180px;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.8rem;
+  border: 1px solid #dddddd;
+  border-radius: 8px;
+}
+
+.availability-row.selected {
+  border-color: #2f295c;
+}
+
+.checkbox-label {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+}
+
+.primary-action {
+  margin-top: 2rem;
+  width: 100%;
+}
+
+.secondary-button {
+  background: #ededed;
+  color: #222222;
+}
+
+.danger-button {
+  background: #8d1b1b;
+}
+
+.message.error {
+  background: #ffe5e5;
+  color: #8d1b1b;
+}
+
+.message.success {
+  background: #e7f7ec;
+  color: #1d6a36;
+}
+
+@media (max-width: 750px) {
+  .main-header,
+  .section-header,
+  .editor-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .form-grid,
+  .topic-editor,
+  .availability-row {
+    grid-template-columns: 1fr;
+  }
+}
