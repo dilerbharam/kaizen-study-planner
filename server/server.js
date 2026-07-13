@@ -557,6 +557,378 @@ app.post("/api/tasks/:taskId/reschedule", async (req, res) => {
   }
 });
 
+app.post("/api/goals", async (req, res) => {
+  try {
+    const {
+      userId,
+      title,
+      targetDate,
+    } = req.body;
+
+    if (!userId || !title?.trim() || !targetDate) {
+      return res.status(400).json({
+        error:
+          "User ID, goal title and target date are required.",
+      });
+    }
+
+    const parsedTargetDate = normaliseDate(targetDate);
+    const today = normaliseDate(new Date());
+
+    if (!parsedTargetDate) {
+      return res.status(400).json({
+        error: "The target date is invalid.",
+      });
+    }
+
+    if (parsedTargetDate < today) {
+      return res.status(400).json({
+        error: "The target date must be in the future.",
+      });
+    }
+
+    const userResult = await pool.query(
+      `SELECT id
+       FROM users
+       WHERE id = $1`,
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        error: "User not found.",
+      });
+    }
+
+    const goalResult = await pool.query(
+      `INSERT INTO goals
+        (
+          user_id,
+          title,
+          target_date,
+          status
+        )
+       VALUES ($1, $2, $3, 'active')
+       RETURNING *`,
+      [
+        userId,
+        title.trim(),
+        targetDate,
+      ]
+    );
+
+    return res.status(201).json({
+      message: "Goal created successfully.",
+      goal: goalResult.rows[0],
+    });
+  } catch (error) {
+    console.error("Failed to create goal:", error);
+
+    return res.status(500).json({
+      error: "Failed to create goal.",
+    });
+  }
+});
+
+app.post(
+  "/api/goals/:goalId/milestones",
+  async (req, res) => {
+    try {
+      const { goalId } = req.params;
+      const {
+        title,
+        sequenceOrder,
+      } = req.body;
+
+      if (!title?.trim()) {
+        return res.status(400).json({
+          error: "Milestone title is required.",
+        });
+      }
+
+      const goalResult = await pool.query(
+        `SELECT id
+         FROM goals
+         WHERE id = $1`,
+        [goalId]
+      );
+
+      if (goalResult.rows.length === 0) {
+        return res.status(404).json({
+          error: "Goal not found.",
+        });
+      }
+
+      const milestoneResult = await pool.query(
+        `INSERT INTO milestones
+          (
+            goal_id,
+            title,
+            sequence_order
+          )
+         VALUES (
+           $1,
+           $2,
+           COALESCE(
+             $3,
+             (
+               SELECT COALESCE(
+                 MAX(sequence_order),
+                 0
+               ) + 1
+               FROM milestones
+               WHERE goal_id = $1
+             )
+           )
+         )
+         RETURNING *`,
+        [
+          goalId,
+          title.trim(),
+          sequenceOrder || null,
+        ]
+      );
+
+      return res.status(201).json({
+        message: "Milestone created successfully.",
+        milestone: milestoneResult.rows[0],
+      });
+    } catch (error) {
+      console.error(
+        "Failed to create milestone:",
+        error
+      );
+
+      return res.status(500).json({
+        error: "Failed to create milestone.",
+      });
+    }
+  }
+);
+
+app.post(
+  "/api/milestones/:milestoneId/topics",
+  async (req, res) => {
+    try {
+      const { milestoneId } = req.params;
+
+      const {
+        title,
+        estimatedMinutes,
+        sequenceOrder,
+      } = req.body;
+
+      const minutes = Number(estimatedMinutes);
+
+      if (!title?.trim()) {
+        return res.status(400).json({
+          error: "Topic title is required.",
+        });
+      }
+
+      if (
+        !Number.isInteger(minutes) ||
+        minutes <= 0
+      ) {
+        return res.status(400).json({
+          error:
+            "Estimated minutes must be a positive whole number.",
+        });
+      }
+
+      const milestoneResult = await pool.query(
+        `SELECT id
+         FROM milestones
+         WHERE id = $1`,
+        [milestoneId]
+      );
+
+      if (milestoneResult.rows.length === 0) {
+        return res.status(404).json({
+          error: "Milestone not found.",
+        });
+      }
+
+      const topicResult = await pool.query(
+        `INSERT INTO topics
+          (
+            milestone_id,
+            title,
+            estimated_minutes,
+            sequence_order
+          )
+         VALUES (
+           $1,
+           $2,
+           $3,
+           COALESCE(
+             $4,
+             (
+               SELECT COALESCE(
+                 MAX(sequence_order),
+                 0
+               ) + 1
+               FROM topics
+               WHERE milestone_id = $1
+             )
+           )
+         )
+         RETURNING *`,
+        [
+          milestoneId,
+          title.trim(),
+          minutes,
+          sequenceOrder || null,
+        ]
+      );
+
+      return res.status(201).json({
+        message: "Topic created successfully.",
+        topic: topicResult.rows[0],
+      });
+    } catch (error) {
+      console.error("Failed to create topic:", error);
+
+      return res.status(500).json({
+        error: "Failed to create topic.",
+      });
+    }
+  }
+);
+
+app.get(
+  "/api/users/:userId/availability",
+  async (req, res) => {
+    try {
+      const { userId } = req.params;
+
+      const result = await pool.query(
+        `SELECT *
+         FROM availability
+         WHERE user_id = $1
+         ORDER BY id`,
+        [userId]
+      );
+
+      return res.json(result.rows);
+    } catch (error) {
+      console.error(
+        "Failed to fetch availability:",
+        error
+      );
+
+      return res.status(500).json({
+        error: "Failed to fetch availability.",
+      });
+    }
+  }
+);
+
+app.put(
+  "/api/users/:userId/availability",
+  async (req, res) => {
+    const client = await pool.connect();
+    let transactionStarted = false;
+
+    try {
+      const { userId } = req.params;
+      const { availability } = req.body;
+
+      const validation =
+        validateAvailability(availability);
+
+      if (!validation.valid) {
+        return res.status(400).json({
+          error: validation.error,
+        });
+      }
+
+      const uniqueDays = new Set(
+        availability.map(
+          (entry) => entry.day_of_week
+        )
+      );
+
+      if (uniqueDays.size !== availability.length) {
+        return res.status(400).json({
+          error:
+            "Each weekday can only appear once.",
+        });
+      }
+
+      const userResult = await client.query(
+        `SELECT id
+         FROM users
+         WHERE id = $1`,
+        [userId]
+      );
+
+      if (userResult.rows.length === 0) {
+        return res.status(404).json({
+          error: "User not found.",
+        });
+      }
+
+      await client.query("BEGIN");
+      transactionStarted = true;
+
+      await client.query(
+        `DELETE FROM availability
+         WHERE user_id = $1`,
+        [userId]
+      );
+
+      const savedAvailability = [];
+
+      for (const entry of availability) {
+        const result = await client.query(
+          `INSERT INTO availability
+            (
+              user_id,
+              day_of_week,
+              available_minutes
+            )
+           VALUES ($1, $2, $3)
+           RETURNING *`,
+          [
+            userId,
+            entry.day_of_week,
+            Number(entry.available_minutes),
+          ]
+        );
+
+        savedAvailability.push(result.rows[0]);
+      }
+
+      await client.query("COMMIT");
+      transactionStarted = false;
+
+      return res.json({
+        message:
+          "Availability updated successfully.",
+        availability: savedAvailability,
+      });
+    } catch (error) {
+      if (transactionStarted) {
+        await client.query("ROLLBACK");
+      }
+
+      console.error(
+        "Failed to update availability:",
+        error
+      );
+
+      return res.status(500).json({
+        error: "Failed to update availability.",
+      });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
