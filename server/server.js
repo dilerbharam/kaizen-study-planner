@@ -8,7 +8,6 @@ const {
   normaliseDate,
   formatDate,
   validateAvailability,
-  calculateRequiredMinutes,
   calculateAvailableCapacity,
   createSchedule,
 } = require("./services/schedulingService");
@@ -20,6 +19,10 @@ const {
 const {
   calculateGoalProgress,
 } = require("./services/progressService");
+
+const {
+  calculateRemainingTopics,
+} = require("./services/regenerationService");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -147,7 +150,11 @@ app.post("/api/goals", async (req, res) => {
       targetDate,
     } = req.body;
 
-    if (!userId || !title?.trim() || !targetDate) {
+    if (
+      !userId ||
+      !title?.trim() ||
+      !targetDate
+    ) {
       return res.status(400).json({
         error:
           "User ID, goal title and target date are required.",
@@ -207,7 +214,10 @@ app.post("/api/goals", async (req, res) => {
       goal: goalResult.rows[0],
     });
   } catch (error) {
-    console.error("Failed to create goal:", error);
+    console.error(
+      "Failed to create goal:",
+      error
+    );
 
     return res.status(500).json({
       error: "Failed to create goal.",
@@ -569,7 +579,11 @@ app.put(
 );
 
 /*
- * Generates a complete schedule for a goal.
+ * Generates or regenerates only unfinished work.
+ *
+ * Completed and skipped records are retained as history.
+ * Existing pending tasks are replaced only after the new
+ * schedule has been successfully validated.
  */
 app.post(
   "/api/goals/:goalId/generate-tasks",
@@ -591,7 +605,7 @@ app.post(
 
       if (!goal) {
         return res.status(404).json({
-          error: "Goal not found",
+          error: "Goal not found.",
         });
       }
 
@@ -603,10 +617,10 @@ app.post(
         goal.target_date
       );
 
-      if (!targetDate) {
+      if (!today || !targetDate) {
         return res.status(400).json({
           error:
-            "The goal has an invalid target date.",
+            "The goal contains an invalid target date.",
         });
       }
 
@@ -640,6 +654,31 @@ app.post(
         });
       }
 
+      const existingTasksResult =
+        await client.query(
+          `SELECT tasks.*
+           FROM tasks
+           JOIN topics
+             ON tasks.topic_id = topics.id
+           JOIN milestones
+             ON topics.milestone_id =
+                milestones.id
+           WHERE milestones.goal_id = $1
+           ORDER BY
+             tasks.scheduled_date,
+             tasks.id`,
+          [goalId]
+        );
+
+      const existingTasks =
+        existingTasksResult.rows;
+
+      const remainingPlan =
+        calculateRemainingTopics({
+          topics,
+          tasks: existingTasks,
+        });
+
       const availabilityResult =
         await client.query(
           `SELECT *
@@ -664,8 +703,67 @@ app.post(
         });
       }
 
-      const totalRequiredMinutes =
-        calculateRequiredMinutes(topics);
+      const completedTaskCount =
+        existingTasks.filter(
+          (task) =>
+            task.status === "completed"
+        ).length;
+
+      const skippedTaskCount =
+        existingTasks.filter(
+          (task) =>
+            task.status === "skipped"
+        ).length;
+
+      /*
+       * When all planned minutes have been completed,
+       * remove any stale pending tasks while retaining
+       * completed and skipped historical records.
+       */
+      if (
+        remainingPlan.totalRemainingMinutes ===
+        0
+      ) {
+        await client.query("BEGIN");
+        transactionStarted = true;
+
+        const deletedPendingResult =
+          await client.query(
+            `DELETE FROM tasks
+             WHERE status = 'pending'
+               AND topic_id IN (
+                 SELECT topics.id
+                 FROM topics
+                 JOIN milestones
+                   ON topics.milestone_id =
+                      milestones.id
+                 WHERE milestones.goal_id = $1
+               )
+             RETURNING id`,
+            [goalId]
+          );
+
+        await client.query("COMMIT");
+        transactionStarted = false;
+
+        return res.json({
+          message:
+            "All planned work has already been completed.",
+          tasks_created: 0,
+          removed_pending_tasks:
+            deletedPendingResult.rowCount,
+          preserved_completed_tasks:
+            completedTaskCount,
+          preserved_skipped_tasks:
+            skippedTaskCount,
+          planned_minutes:
+            remainingPlan.totalPlannedMinutes,
+          completed_minutes:
+            remainingPlan.totalCompletedMinutes,
+          remaining_minutes: 0,
+          tasks: [],
+        });
+      }
 
       const totalAvailableMinutes =
         calculateAvailableCapacity(
@@ -676,24 +774,24 @@ app.post(
 
       if (
         totalAvailableMinutes <
-        totalRequiredMinutes
+        remainingPlan.totalRemainingMinutes
       ) {
         return res.status(422).json({
           error:
             "The remaining work cannot fit before the target date.",
           required_minutes:
-            totalRequiredMinutes,
+            remainingPlan.totalRemainingMinutes,
           available_minutes:
             totalAvailableMinutes,
           remaining_minutes:
-            totalRequiredMinutes -
+            remainingPlan.totalRemainingMinutes -
             totalAvailableMinutes,
         });
       }
 
       const scheduleResult =
         createSchedule({
-          topics,
+          topics: remainingPlan.topics,
           availability,
           startDate: today,
           targetDate,
@@ -702,7 +800,7 @@ app.post(
       if (!scheduleResult.complete) {
         return res.status(422).json({
           error:
-            "The complete schedule could not be generated.",
+            "The remaining schedule could not be generated.",
           tasks_created: 0,
           remaining_minutes:
             scheduleResult.remainingMinutes,
@@ -712,18 +810,25 @@ app.post(
       await client.query("BEGIN");
       transactionStarted = true;
 
-      await client.query(
-        `DELETE FROM tasks
-         WHERE topic_id IN (
-           SELECT topics.id
-           FROM topics
-           JOIN milestones
-             ON topics.milestone_id =
-                milestones.id
-           WHERE milestones.goal_id = $1
-         )`,
-        [goalId]
-      );
+      /*
+       * Only pending tasks are replaced.
+       * Completed and skipped records remain stored.
+       */
+      const deletedPendingResult =
+        await client.query(
+          `DELETE FROM tasks
+           WHERE status = 'pending'
+             AND topic_id IN (
+               SELECT topics.id
+               FROM topics
+               JOIN milestones
+                 ON topics.milestone_id =
+                    milestones.id
+               WHERE milestones.goal_id = $1
+             )
+           RETURNING id`,
+          [goalId]
+        );
 
       const generatedTasks = [];
 
@@ -761,11 +866,21 @@ app.post(
 
       return res.status(201).json({
         message:
-          `${generatedTasks.length} tasks generated successfully`,
+          `${generatedTasks.length} remaining tasks generated successfully.`,
         tasks_created:
           generatedTasks.length,
+        removed_pending_tasks:
+          deletedPendingResult.rowCount,
+        preserved_completed_tasks:
+          completedTaskCount,
+        preserved_skipped_tasks:
+          skippedTaskCount,
+        planned_minutes:
+          remainingPlan.totalPlannedMinutes,
+        completed_minutes:
+          remainingPlan.totalCompletedMinutes,
         required_minutes:
-          totalRequiredMinutes,
+          remainingPlan.totalRemainingMinutes,
         available_minutes:
           totalAvailableMinutes,
         tasks: generatedTasks,
@@ -776,12 +891,13 @@ app.post(
       }
 
       console.error(
-        "Failed to generate tasks:",
+        "Failed to regenerate remaining tasks:",
         error
       );
 
       return res.status(500).json({
-        error: "Failed to generate tasks",
+        error:
+          "Failed to regenerate remaining tasks.",
       });
     } finally {
       client.release();
@@ -928,7 +1044,7 @@ app.get(
 );
 
 /*
- * Updates a task's status.
+ * Updates a pending task's status.
  */
 app.patch(
   "/api/tasks/:taskId/status",
@@ -938,7 +1054,6 @@ app.patch(
       const { status } = req.body;
 
       const allowedStatuses = [
-        "pending",
         "completed",
         "skipped",
       ];
@@ -946,7 +1061,7 @@ app.patch(
       if (!allowedStatuses.includes(status)) {
         return res.status(400).json({
           error:
-            "Invalid status. Use pending, completed, or skipped.",
+            "Invalid status. Use completed or skipped.",
         });
       }
 
@@ -966,7 +1081,9 @@ app.patch(
         });
       }
 
-      if (existingTask.status !== "pending") {
+      if (
+        existingTask.status !== "pending"
+      ) {
         return res.status(409).json({
           error:
             "Only pending tasks can have their status updated.",
