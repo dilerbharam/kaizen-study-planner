@@ -12,6 +12,7 @@ const {
   calculateRequiredMinutes,
   calculateAvailableCapacity,
   createSchedule,
+  findNextAvailableDate,
 } = require("./services/schedulingService");
 
 const app = express();
@@ -361,12 +362,16 @@ app.patch("/api/tasks/:taskId/status", async (req, res) => {
 });
 
 app.post("/api/tasks/:taskId/reschedule", async (req, res) => {
+  const client = await pool.connect();
+  let transactionStarted = false;
+
   try {
     const { taskId } = req.params;
 
-    const taskResult = await pool.query(
+    const taskResult = await client.query(
       `SELECT
          tasks.*,
+         goals.id AS goal_id,
          goals.user_id,
          goals.target_date
        FROM tasks
@@ -394,10 +399,30 @@ app.post("/api/tasks/:taskId/reschedule", async (req, res) => {
       });
     }
 
-    const availabilityResult = await pool.query(
+    const existingReplacementResult = await client.query(
+      `SELECT id
+       FROM tasks
+       WHERE topic_id = $1
+         AND task_text = $2
+         AND status = 'pending'
+       LIMIT 1`,
+      [
+        task.topic_id,
+        `${task.task_text} (Rescheduled)`,
+      ]
+    );
+
+    if (existingReplacementResult.rows.length > 0) {
+      return res.status(409).json({
+        error: "This skipped task has already been rescheduled.",
+      });
+    }
+
+    const availabilityResult = await client.query(
       `SELECT *
        FROM availability
-       WHERE user_id = $1`,
+       WHERE user_id = $1
+       ORDER BY id`,
       [task.user_id]
     );
 
@@ -412,46 +437,72 @@ app.post("/api/tasks/:taskId/reschedule", async (req, res) => {
       });
     }
 
-    const availabilityByDay = new Map(
-      availability.map((entry) => [
-        dayMap[entry.day_of_week],
-        Number(entry.available_minutes),
-      ])
+    const workloadResult = await client.query(
+      `SELECT
+         tasks.scheduled_date,
+         SUM(tasks.estimated_minutes) AS allocated_minutes
+       FROM tasks
+       JOIN topics
+         ON tasks.topic_id = topics.id
+       JOIN milestones
+         ON topics.milestone_id = milestones.id
+       WHERE milestones.goal_id = $1
+         AND tasks.status <> 'skipped'
+         AND tasks.id <> $2
+       GROUP BY tasks.scheduled_date
+       ORDER BY tasks.scheduled_date`,
+      [task.goal_id, taskId]
+    );
+
+    const workloadByDate = new Map(
+      workloadResult.rows.map((row) => {
+        const date = normaliseDate(row.scheduled_date);
+
+        return [
+          formatDate(date),
+          Number(row.allocated_minutes),
+        ];
+      })
     );
 
     const targetDate = normaliseDate(task.target_date);
-    const newDate = normaliseDate(task.scheduled_date);
+    const originalTaskDate = normaliseDate(
+      task.scheduled_date
+    );
+    const today = normaliseDate(new Date());
 
-    if (!targetDate || !newDate) {
+    if (!targetDate || !originalTaskDate || !today) {
       return res.status(400).json({
         error: "The task contains an invalid date.",
       });
     }
 
-    newDate.setDate(newDate.getDate() + 1);
+    const searchStartDate = new Date(originalTaskDate);
+    searchStartDate.setDate(searchStartDate.getDate() + 1);
 
-    let suitableDateFound = false;
-
-    while (newDate <= targetDate) {
-      const availableMinutes =
-        availabilityByDay.get(newDate.getDay()) || 0;
-
-      if (availableMinutes > 0) {
-        suitableDateFound = true;
-        break;
-      }
-
-      newDate.setDate(newDate.getDate() + 1);
+    if (searchStartDate < today) {
+      searchStartDate.setTime(today.getTime());
     }
 
-    if (!suitableDateFound) {
+    const slotResult = findNextAvailableDate({
+      startDate: searchStartDate,
+      targetDate,
+      availability,
+      workloadByDate,
+      requiredMinutes: Number(task.estimated_minutes),
+    });
+
+    if (!slotResult.found) {
       return res.status(422).json({
         error:
-          "The skipped task cannot be rescheduled before the target date.",
+          "The skipped task cannot fit into the remaining availability before the target date.",
       });
     }
 
-    const rescheduledTaskResult = await pool.query(
+    await client.query("BEGIN");
+    transactionStarted = true;
+
+    const rescheduledTaskResult = await client.query(
       `INSERT INTO tasks
         (
           topic_id,
@@ -464,23 +515,45 @@ app.post("/api/tasks/:taskId/reschedule", async (req, res) => {
        RETURNING *`,
       [
         task.topic_id,
-        formatDate(newDate),
+        slotResult.date,
         `${task.task_text} (Rescheduled)`,
         task.estimated_minutes,
       ]
     );
 
+    await client.query("COMMIT");
+    transactionStarted = false;
+
     return res.status(201).json({
-      message: "Skipped task rescheduled successfully",
+      message:
+        "Skipped task rescheduled within the available daily workload.",
       original_task: task,
       new_task: rescheduledTaskResult.rows[0],
+      capacity: {
+        date: slotResult.date,
+        daily_capacity: slotResult.dailyCapacity,
+        previously_allocated:
+          slotResult.allocatedMinutes,
+        allocated_after_rescheduling:
+          slotResult.allocatedMinutes +
+          Number(task.estimated_minutes),
+        remaining_after_rescheduling:
+          slotResult.remainingCapacity -
+          Number(task.estimated_minutes),
+      },
     });
   } catch (error) {
+    if (transactionStarted) {
+      await client.query("ROLLBACK");
+    }
+
     console.error("Failed to reschedule task:", error);
 
     return res.status(500).json({
       error: "Failed to reschedule task",
     });
+  } finally {
+    client.release();
   }
 });
 

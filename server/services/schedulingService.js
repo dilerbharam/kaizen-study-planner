@@ -186,6 +186,59 @@ function createSchedule({
   };
 }
 
+function findNextAvailableDate({
+  startDate,
+  targetDate,
+  availability,
+  workloadByDate,
+  requiredMinutes,
+}) {
+  const availabilityByDay = new Map(
+    availability.map((entry) => [
+      dayMap[entry.day_of_week],
+      Number(entry.available_minutes),
+    ])
+  );
+
+  for (
+    let date = new Date(startDate);
+    date <= targetDate;
+    date.setDate(date.getDate() + 1)
+  ) {
+    const dailyCapacity =
+      availabilityByDay.get(date.getDay()) || 0;
+
+    if (dailyCapacity === 0) {
+      continue;
+    }
+
+    const dateKey = formatDate(date);
+    const allocatedMinutes =
+      Number(workloadByDate.get(dateKey)) || 0;
+
+    const remainingCapacity =
+      dailyCapacity - allocatedMinutes;
+
+    if (remainingCapacity >= requiredMinutes) {
+      return {
+        found: true,
+        date: dateKey,
+        dailyCapacity,
+        allocatedMinutes,
+        remainingCapacity,
+      };
+    }
+  }
+
+  return {
+    found: false,
+    date: null,
+    dailyCapacity: 0,
+    allocatedMinutes: 0,
+    remainingCapacity: 0,
+  };
+}
+
 module.exports = {
   dayMap,
   normaliseDate,
@@ -194,4 +247,5 @@ module.exports = {
   calculateRequiredMinutes,
   calculateAvailableCapacity,
   createSchedule,
+  findNextAvailableDate,
 };
