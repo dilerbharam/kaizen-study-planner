@@ -9,7 +9,6 @@ const {
   formatDate,
   validateAvailability,
   calculateAvailableCapacity,
-  createSchedule,
 } = require("./services/schedulingService");
 
 const {
@@ -80,7 +79,7 @@ app.get("/api/goals/:userId", async (req, res) => {
 });
 
 /*
- * Retrieves a goal with its milestones and topics.
+ * Retrieves one goal with its milestones and topics.
  */
 app.get(
   "/api/goals/:goalId/details",
@@ -579,11 +578,11 @@ app.put(
 );
 
 /*
- * Generates or regenerates only unfinished work.
+ * Generates or regenerates unfinished work.
  *
- * Completed and skipped records are retained as history.
- * Existing pending tasks are replaced only after the new
- * schedule has been successfully validated.
+ * Completed and skipped records remain as history.
+ * Pending replacement tasks with reschedule lineage are
+ * protected. Only ordinary pending tasks are rebuilt.
  */
 app.post(
   "/api/goals/:goalId/generate-tasks",
@@ -715,10 +714,83 @@ app.post(
             task.status === "skipped"
         ).length;
 
+      const protectedReplacementTasks =
+        existingTasks.filter(
+          (task) =>
+            task.status === "pending" &&
+            task.rescheduled_from_task_id !==
+              null &&
+            task.rescheduled_from_task_id !==
+              undefined
+        );
+
       /*
-       * When all planned minutes have been completed,
-       * remove any stale pending tasks while retaining
-       * completed and skipped historical records.
+       * Record the daily capacity already occupied by
+       * pending replacement tasks.
+       */
+      const protectedWorkloadByDate =
+        new Map();
+
+      for (
+        const task of
+          protectedReplacementTasks
+      ) {
+        const taskDate = normaliseDate(
+          task.scheduled_date
+        );
+
+        if (
+          !taskDate ||
+          taskDate < today ||
+          taskDate > targetDate
+        ) {
+          continue;
+        }
+
+        const dateKey =
+          formatDate(taskDate);
+
+        const existingMinutes =
+          protectedWorkloadByDate.get(
+            dateKey
+          ) || 0;
+
+        protectedWorkloadByDate.set(
+          dateKey,
+          existingMinutes +
+            Number(
+              task.estimated_minutes
+            )
+        );
+      }
+
+      const grossAvailableMinutes =
+        calculateAvailableCapacity(
+          today,
+          targetDate,
+          availability
+        );
+
+      const protectedMinutesInWindow =
+        Array.from(
+          protectedWorkloadByDate.values()
+        ).reduce(
+          (total, minutes) =>
+            total + Number(minutes),
+          0
+        );
+
+      const netAvailableMinutes =
+        Math.max(
+          grossAvailableMinutes -
+            protectedMinutesInWindow,
+          0
+        );
+
+      /*
+       * When completed work and protected replacements
+       * already cover the remaining plan, delete only
+       * obsolete ordinary pending tasks.
        */
       if (
         remainingPlan.totalRemainingMinutes ===
@@ -731,6 +803,7 @@ app.post(
           await client.query(
             `DELETE FROM tasks
              WHERE status = 'pending'
+               AND rescheduled_from_task_id IS NULL
                AND topic_id IN (
                  SELECT topics.id
                  FROM topics
@@ -748,7 +821,7 @@ app.post(
 
         return res.json({
           message:
-            "All planned work has already been completed.",
+            "All unfinished work is already covered by completed or protected replacement tasks.",
           tasks_created: 0,
           removed_pending_tasks:
             deletedPendingResult.rowCount,
@@ -756,24 +829,22 @@ app.post(
             completedTaskCount,
           preserved_skipped_tasks:
             skippedTaskCount,
+          preserved_replacement_tasks:
+            protectedReplacementTasks.length,
           planned_minutes:
             remainingPlan.totalPlannedMinutes,
           completed_minutes:
             remainingPlan.totalCompletedMinutes,
+          protected_pending_minutes:
+            remainingPlan
+              .totalProtectedPendingMinutes,
           remaining_minutes: 0,
           tasks: [],
         });
       }
 
-      const totalAvailableMinutes =
-        calculateAvailableCapacity(
-          today,
-          targetDate,
-          availability
-        );
-
       if (
-        totalAvailableMinutes <
+        netAvailableMinutes <
         remainingPlan.totalRemainingMinutes
       ) {
         return res.status(422).json({
@@ -782,17 +853,41 @@ app.post(
           required_minutes:
             remainingPlan.totalRemainingMinutes,
           available_minutes:
-            totalAvailableMinutes,
-          remaining_minutes:
+            netAvailableMinutes,
+          protected_pending_minutes:
+            remainingPlan
+              .totalProtectedPendingMinutes,
+          shortfall_minutes:
             remainingPlan.totalRemainingMinutes -
-            totalAvailableMinutes,
+            netAvailableMinutes,
         });
       }
 
+      /*
+       * Convert unfinished topics into task units for the
+       * rebalancing service.
+       */
+      const tasksForRegeneration =
+        remainingPlan.topics.map(
+          (topic) => ({
+            id: topic.id,
+            topic_id: topic.id,
+            task_text:
+              `Study: ${topic.title}`,
+            estimated_minutes:
+              Number(
+                topic.estimated_minutes
+              ),
+            status: "pending",
+          })
+        );
+
       const scheduleResult =
-        createSchedule({
-          topics: remainingPlan.topics,
+        rebalanceTasks({
+          tasks: tasksForRegeneration,
           availability,
+          workloadByDate:
+            protectedWorkloadByDate,
           startDate: today,
           targetDate,
         });
@@ -800,7 +895,7 @@ app.post(
       if (!scheduleResult.complete) {
         return res.status(422).json({
           error:
-            "The remaining schedule could not be generated.",
+            "The remaining schedule could not be generated around protected replacement tasks.",
           tasks_created: 0,
           remaining_minutes:
             scheduleResult.remainingMinutes,
@@ -811,13 +906,14 @@ app.post(
       transactionStarted = true;
 
       /*
-       * Only pending tasks are replaced.
-       * Completed and skipped records remain stored.
+       * Delete only ordinary pending tasks.
+       * Pending replacement tasks retain their lineage.
        */
       const deletedPendingResult =
         await client.query(
           `DELETE FROM tasks
            WHERE status = 'pending'
+             AND rescheduled_from_task_id IS NULL
              AND topic_id IN (
                SELECT topics.id
                FROM topics
@@ -843,9 +939,17 @@ app.post(
                 scheduled_date,
                 task_text,
                 estimated_minutes,
-                status
+                status,
+                rescheduled_from_task_id
               )
-             VALUES ($1, $2, $3, $4, $5)
+             VALUES (
+               $1,
+               $2,
+               $3,
+               $4,
+               $5,
+               NULL
+             )
              RETURNING *`,
             [
               task.topicId,
@@ -875,14 +979,19 @@ app.post(
           completedTaskCount,
         preserved_skipped_tasks:
           skippedTaskCount,
+        preserved_replacement_tasks:
+          protectedReplacementTasks.length,
         planned_minutes:
           remainingPlan.totalPlannedMinutes,
         completed_minutes:
           remainingPlan.totalCompletedMinutes,
+        protected_pending_minutes:
+          remainingPlan
+            .totalProtectedPendingMinutes,
         required_minutes:
           remainingPlan.totalRemainingMinutes,
         available_minutes:
-          totalAvailableMinutes,
+          netAvailableMinutes,
         tasks: generatedTasks,
       });
     } catch (error) {
@@ -906,7 +1015,10 @@ app.post(
 );
 
 /*
- * Retrieves all scheduled tasks for a goal.
+ * Retrieves tasks for a goal.
+ *
+ * can_reschedule is calculated by the backend so the
+ * interface cannot offer duplicate rescheduling.
  */
 app.get(
   "/api/goals/:goalId/tasks",
@@ -915,7 +1027,42 @@ app.get(
       const { goalId } = req.params;
 
       const tasksResult = await pool.query(
-        `SELECT tasks.*
+        `SELECT
+           tasks.*,
+           CASE
+             WHEN tasks.status = 'skipped'
+               AND tasks.rescheduled_at IS NULL
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM tasks AS linked_replacement
+                 WHERE linked_replacement
+                         .rescheduled_from_task_id =
+                       tasks.id
+               )
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM tasks AS active_equivalent
+                 WHERE active_equivalent.topic_id =
+                       tasks.topic_id
+                   AND active_equivalent.status =
+                       'pending'
+                   AND regexp_replace(
+                         active_equivalent.task_text,
+                         '\\s+\\(Rescheduled\\)$',
+                         '',
+                         'i'
+                       )
+                       =
+                       regexp_replace(
+                         tasks.task_text,
+                         '\\s+\\(Rescheduled\\)$',
+                         '',
+                         'i'
+                       )
+               )
+             THEN TRUE
+             ELSE FALSE
+           END AS can_reschedule
          FROM tasks
          JOIN topics
            ON tasks.topic_id = topics.id
@@ -944,7 +1091,7 @@ app.get(
 );
 
 /*
- * Returns progress and feasibility information for a goal.
+ * Returns progress and feasibility information.
  */
 app.get(
   "/api/goals/:goalId/progress",
@@ -1119,7 +1266,10 @@ app.patch(
 );
 
 /*
- * Rebalances a skipped task together with future pending tasks.
+ * Rebalances a skipped task and later ordinary pending work.
+ *
+ * Existing replacement tasks are protected so their
+ * reschedule lineage is not deleted or changed.
  */
 app.post(
   "/api/tasks/:taskId/reschedule",
@@ -1167,27 +1317,68 @@ app.post(
         });
       }
 
-      const existingReplacementResult =
+      if (skippedTask.rescheduled_at) {
+        return res.status(409).json({
+          error:
+            "This skipped task has already been rescheduled.",
+        });
+      }
+
+      const existingLinkedReplacementResult =
         await client.query(
           `SELECT id
            FROM tasks
-           WHERE topic_id = $1
-             AND task_text LIKE $2
-             AND status = 'pending'
+           WHERE rescheduled_from_task_id = $1
            LIMIT 1`,
-          [
-            skippedTask.topic_id,
-            `${skippedTask.task_text}%`,
-          ]
+          [skippedTask.id]
         );
 
       if (
-        existingReplacementResult.rows.length >
-        0
+        existingLinkedReplacementResult.rows
+          .length > 0
       ) {
         return res.status(409).json({
           error:
             "This skipped task has already been rescheduled.",
+        });
+      }
+
+      /*
+       * Prevent legacy duplicate skipped rows from creating
+       * extra pending work when equivalent work already exists.
+       */
+      const activeEquivalentResult =
+        await client.query(
+          `SELECT id
+           FROM tasks
+           WHERE topic_id = $1
+             AND status = 'pending'
+             AND regexp_replace(
+                   task_text,
+                   '\\s+\\(Rescheduled\\)$',
+                   '',
+                   'i'
+                 )
+                 =
+                 regexp_replace(
+                   $2::text,
+                   '\\s+\\(Rescheduled\\)$',
+                   '',
+                   'i'
+                 )
+           LIMIT 1`,
+          [
+            skippedTask.topic_id,
+            skippedTask.task_text,
+          ]
+        );
+
+      if (
+        activeEquivalentResult.rows.length > 0
+      ) {
+        return res.status(409).json({
+          error:
+            "Equivalent pending work already exists for this skipped task.",
         });
       }
 
@@ -1253,6 +1444,10 @@ app.post(
         );
       }
 
+      /*
+       * Existing pending replacement tasks are excluded from
+       * rebalancing and remain protected.
+       */
       const futurePendingResult =
         await client.query(
           `SELECT tasks.*
@@ -1264,6 +1459,8 @@ app.post(
                 milestones.id
            WHERE milestones.goal_id = $1
              AND tasks.status = 'pending'
+             AND tasks.rescheduled_from_task_id
+                   IS NULL
              AND (
                tasks.scheduled_date > $2
                OR (
@@ -1377,6 +1574,20 @@ app.post(
         const task of
           rebalanceResult.tasks
       ) {
+        const sourceTaskIds =
+          Array.isArray(
+            task.sourceTaskIds
+          )
+            ? task.sourceTaskIds.map(
+                Number
+              )
+            : [];
+
+        const isReplacementOfSkippedTask =
+          sourceTaskIds.includes(
+            Number(skippedTask.id)
+          );
+
         const insertedTask =
           await client.query(
             `INSERT INTO tasks
@@ -1385,9 +1596,17 @@ app.post(
                 scheduled_date,
                 task_text,
                 estimated_minutes,
-                status
+                status,
+                rescheduled_from_task_id
               )
-             VALUES ($1, $2, $3, $4, $5)
+             VALUES (
+               $1,
+               $2,
+               $3,
+               $4,
+               $5,
+               $6
+             )
              RETURNING *`,
             [
               task.topicId,
@@ -1395,11 +1614,34 @@ app.post(
               task.taskText,
               task.estimatedMinutes,
               task.status,
+              isReplacementOfSkippedTask
+                ? skippedTask.id
+                : null,
             ]
           );
 
         rebuiltTasks.push(
           insertedTask.rows[0]
+        );
+      }
+
+      const updatedSkippedTaskResult =
+        await client.query(
+          `UPDATE tasks
+           SET rescheduled_at =
+                 CURRENT_TIMESTAMP
+           WHERE id = $1
+             AND rescheduled_at IS NULL
+           RETURNING *`,
+          [skippedTask.id]
+        );
+
+      if (
+        updatedSkippedTaskResult.rows
+          .length === 0
+      ) {
+        throw new Error(
+          "The skipped task was already rescheduled."
         );
       }
 
@@ -1410,7 +1652,7 @@ app.post(
         message:
           "Skipped task and future pending work rebalanced successfully.",
         original_skipped_task:
-          skippedTask,
+          updatedSkippedTaskResult.rows[0],
         removed_future_tasks:
           futurePendingIds.length,
         rebuilt_tasks:

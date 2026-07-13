@@ -522,18 +522,29 @@ function App() {
                       )}
 
                       {task.status ===
-                        "skipped" && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            rescheduleTask(
-                              task.id
-                            )
-                          }
-                        >
-                          Reschedule
-                        </button>
-                      )}
+                        "skipped" &&
+                        task.can_reschedule && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              rescheduleTask(
+                                task.id
+                              )
+                            }
+                          >
+                            Reschedule
+                          </button>
+                        )}
+
+                      {task.status ===
+                        "skipped" &&
+                        !task.can_reschedule && (
+                          <span className="rescheduled-label">
+                            {task.rescheduled_at
+                              ? "Replacement created"
+                              : "Covered by current schedule"}
+                          </span>
+                        )}
                     </div>
                   </article>
                 ))}

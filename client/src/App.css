@@ -405,3 +405,12 @@ button:hover {
     flex-direction: column;
   }
 }
+.rescheduled-label {
+  display: inline-block;
+  padding: 6px 10px;
+  color: #555;
+  background: #e9ecef;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}

@@ -4,10 +4,16 @@ const {
 } = require("./schedulingService");
 
 /**
- * Removes labels previously added during scheduling or rescheduling.
+ * Removes scheduling labels so fragments can be compared
+ * using their underlying task name.
+ *
+ * Examples:
+ * "Study: Loops - Part 2" becomes "Study: Loops".
+ * "Study: Loops - Part 2 (Rescheduled)" becomes
+ * "Study: Loops".
  */
 function getBaseTaskText(taskText) {
-  return taskText
+  return String(taskText)
     .replace(/\s+\(Rescheduled\)$/i, "")
     .replace(/\s+- Part \d+$/i, "")
     .trim();
@@ -20,19 +26,21 @@ function getBaseTaskText(taskText) {
  * "Study: Loops - Part 2" returns 2.
  */
 function getOriginalPartNumber(taskText) {
-  const match = taskText.match(/- Part (\d+)/i);
+  const match = String(taskText).match(
+    /- Part (\d+)/i
+  );
 
   return match ? Number(match[1]) : null;
 }
 
 /**
- * Combines consecutive fragments belonging to the same topic.
+ * Combines consecutive fragments belonging to the same
+ * logical topic before they are redistributed.
  *
- * Example:
- * - Study: Loops - Part 1, 60 minutes
- * - Study: Loops - Part 2, 30 minutes
- *
- * becomes one 90-minute unit before it is redistributed.
+ * Tasks are grouped only when they have the same status.
+ * This prevents a skipped fragment from being merged with
+ * a later pending fragment and incorrectly assigning
+ * reschedule lineage to both.
  */
 function groupTasksByTopic(tasks) {
   const groupedTasks = [];
@@ -51,7 +59,8 @@ function groupTasksByTopic(tasks) {
     const canBeGrouped =
       previousTask &&
       previousTask.topic_id === task.topic_id &&
-      previousTask.task_text === baseTaskText;
+      previousTask.task_text === baseTaskText &&
+      previousTask.status === task.status;
 
     if (canBeGrouped) {
       previousTask.estimated_minutes += Number(
@@ -78,6 +87,7 @@ function groupTasksByTopic(tasks) {
         id: task.id,
         topic_id: task.topic_id,
         task_text: baseTaskText,
+        status: task.status,
         estimated_minutes: Number(
           task.estimated_minutes
         ),
@@ -98,7 +108,8 @@ function groupTasksByTopic(tasks) {
 }
 
 /**
- * Determines the first part number to use when rebuilding a grouped task.
+ * Determines which part number should be used first when
+ * rebuilding a grouped task.
  */
 function getStartingPartNumber(groupedTask) {
   if (
@@ -113,11 +124,11 @@ function getStartingPartNumber(groupedTask) {
 }
 
 /**
- * Rebuilds skipped and future pending tasks across remaining availability.
+ * Rebuilds skipped and future pending work across the
+ * remaining available dates.
  *
- * Completed tasks are not supplied because the route protects them from
- * modification. The skipped task is supplied first, followed by later
- * pending tasks in learning order.
+ * Completed work is protected by the calling route and is
+ * not supplied to this service.
  */
 function rebalanceTasks({
   tasks,
@@ -189,10 +200,6 @@ function rebalanceTasks({
       const sourceTask =
         groupedTasks[taskIndex];
 
-      const originalTaskMinutes = Number(
-        sourceTask.estimated_minutes
-      );
-
       const allocatedMinutes = Math.min(
         remainingTaskMinutes,
         remainingDayCapacity
@@ -202,11 +209,13 @@ function rebalanceTasks({
         remainingTaskMinutes >
         remainingDayCapacity;
 
+      const startingPartNumber =
+        getStartingPartNumber(sourceTask);
+
       const shouldDisplayPartNumber =
         sourceTask.was_previously_split ||
         willBeSplit ||
-        partNumber >
-          getStartingPartNumber(sourceTask);
+        partNumber > startingPartNumber;
 
       let rebuiltTaskText =
         sourceTask.task_text;
@@ -286,5 +295,6 @@ module.exports = {
   getBaseTaskText,
   getOriginalPartNumber,
   groupTasksByTopic,
+  getStartingPartNumber,
   rebalanceTasks,
 };
