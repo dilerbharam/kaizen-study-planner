@@ -5,15 +5,17 @@ require("dotenv").config();
 const pool = require("./db");
 
 const {
-  dayMap,
   normaliseDate,
   formatDate,
   validateAvailability,
   calculateRequiredMinutes,
   calculateAvailableCapacity,
   createSchedule,
-  findNextAvailableDate,
 } = require("./services/schedulingService");
+
+const {
+  rebalanceTasks,
+} = require("./services/rebalancingService");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -42,6 +44,9 @@ app.get("/test-db", async (req, res) => {
   }
 });
 
+/*
+ * Retrieves all goals belonging to a user.
+ */
 app.get("/api/goals/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
@@ -64,6 +69,9 @@ app.get("/api/goals/:userId", async (req, res) => {
   }
 });
 
+/*
+ * Retrieves a goal with its milestones and topics.
+ */
 app.get("/api/goals/:goalId/details", async (req, res) => {
   try {
     const { goalId } = req.params;
@@ -95,7 +103,9 @@ app.get("/api/goals/:goalId/details", async (req, res) => {
        JOIN milestones
          ON topics.milestone_id = milestones.id
        WHERE milestones.goal_id = $1
-       ORDER BY milestones.sequence_order, topics.sequence_order`,
+       ORDER BY
+         milestones.sequence_order,
+         topics.sequence_order`,
       [goalId]
     );
 
@@ -113,450 +123,9 @@ app.get("/api/goals/:goalId/details", async (req, res) => {
   }
 });
 
-app.post("/api/goals/:goalId/generate-tasks", async (req, res) => {
-  const client = await pool.connect();
-  let transactionStarted = false;
-
-  try {
-    const { goalId } = req.params;
-
-    const goalResult = await client.query(
-      `SELECT *
-       FROM goals
-       WHERE id = $1`,
-      [goalId]
-    );
-
-    const goal = goalResult.rows[0];
-
-    if (!goal) {
-      return res.status(404).json({
-        error: "Goal not found",
-      });
-    }
-
-    const today = normaliseDate(new Date());
-    const targetDate = normaliseDate(goal.target_date);
-
-    if (!targetDate) {
-      return res.status(400).json({
-        error: "The goal has an invalid target date.",
-      });
-    }
-
-    if (targetDate < today) {
-      return res.status(400).json({
-        error: "The target date must be today or a future date.",
-      });
-    }
-
-    const topicsResult = await client.query(
-      `SELECT topics.*
-       FROM topics
-       JOIN milestones
-         ON topics.milestone_id = milestones.id
-       WHERE milestones.goal_id = $1
-       ORDER BY milestones.sequence_order, topics.sequence_order`,
-      [goalId]
-    );
-
-    const topics = topicsResult.rows;
-
-    if (topics.length === 0) {
-      return res.status(400).json({
-        error: "No topics have been added to this goal.",
-      });
-    }
-
-    const availabilityResult = await client.query(
-      `SELECT *
-       FROM availability
-       WHERE user_id = $1
-       ORDER BY id`,
-      [goal.user_id]
-    );
-
-    const availability = availabilityResult.rows;
-
-    const availabilityValidation =
-      validateAvailability(availability);
-
-    if (!availabilityValidation.valid) {
-      return res.status(400).json({
-        error: availabilityValidation.error,
-      });
-    }
-
-    const totalRequiredMinutes =
-      calculateRequiredMinutes(topics);
-
-    const totalAvailableMinutes =
-      calculateAvailableCapacity(
-        today,
-        targetDate,
-        availability
-      );
-
-    if (totalAvailableMinutes < totalRequiredMinutes) {
-      return res.status(422).json({
-        error:
-          "The remaining work cannot fit before the target date.",
-        required_minutes: totalRequiredMinutes,
-        available_minutes: totalAvailableMinutes,
-        remaining_minutes:
-          totalRequiredMinutes - totalAvailableMinutes,
-      });
-    }
-
-    const scheduleResult = createSchedule({
-      topics,
-      availability,
-      startDate: today,
-      targetDate,
-    });
-
-    if (!scheduleResult.complete) {
-      return res.status(422).json({
-        error:
-          "The complete schedule could not be generated.",
-        tasks_created: 0,
-        remaining_minutes: scheduleResult.remainingMinutes,
-      });
-    }
-
-    await client.query("BEGIN");
-    transactionStarted = true;
-
-    await client.query(
-      `DELETE FROM tasks
-       WHERE topic_id IN (
-         SELECT topics.id
-         FROM topics
-         JOIN milestones
-           ON topics.milestone_id = milestones.id
-         WHERE milestones.goal_id = $1
-       )`,
-      [goalId]
-    );
-
-    const generatedTasks = [];
-
-    for (const task of scheduleResult.tasks) {
-      const insertedTask = await client.query(
-        `INSERT INTO tasks
-          (
-            topic_id,
-            scheduled_date,
-            task_text,
-            estimated_minutes,
-            status
-          )
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING *`,
-        [
-          task.topicId,
-          task.scheduledDate,
-          task.taskText,
-          task.estimatedMinutes,
-          task.status,
-        ]
-      );
-
-      generatedTasks.push(insertedTask.rows[0]);
-    }
-
-    await client.query("COMMIT");
-    transactionStarted = false;
-
-    return res.status(201).json({
-      message: `${generatedTasks.length} tasks generated successfully`,
-      tasks_created: generatedTasks.length,
-      required_minutes: totalRequiredMinutes,
-      available_minutes: totalAvailableMinutes,
-      tasks: generatedTasks,
-    });
-  } catch (error) {
-    if (transactionStarted) {
-      await client.query("ROLLBACK");
-    }
-
-    console.error("Failed to generate tasks:", error);
-
-    return res.status(500).json({
-      error: "Failed to generate tasks",
-    });
-  } finally {
-    client.release();
-  }
-});
-
-app.get("/api/goals/:goalId/tasks", async (req, res) => {
-  try {
-    const { goalId } = req.params;
-
-    const tasksResult = await pool.query(
-      `SELECT tasks.*
-       FROM tasks
-       JOIN topics
-         ON tasks.topic_id = topics.id
-       JOIN milestones
-         ON topics.milestone_id = milestones.id
-       WHERE milestones.goal_id = $1
-       ORDER BY tasks.scheduled_date, tasks.id`,
-      [goalId]
-    );
-
-    return res.json(tasksResult.rows);
-  } catch (error) {
-    console.error("Failed to fetch tasks:", error);
-
-    return res.status(500).json({
-      error: "Failed to fetch tasks",
-    });
-  }
-});
-
-app.patch("/api/tasks/:taskId/status", async (req, res) => {
-  try {
-    const { taskId } = req.params;
-    const { status } = req.body;
-
-    const allowedStatuses = [
-      "pending",
-      "completed",
-      "skipped",
-    ];
-
-    if (!allowedStatuses.includes(status)) {
-      return res.status(400).json({
-        error:
-          "Invalid status. Use pending, completed, or skipped.",
-      });
-    }
-
-    const updatedTaskResult = await pool.query(
-      `UPDATE tasks
-       SET status = $1
-       WHERE id = $2
-       RETURNING *`,
-      [status, taskId]
-    );
-
-    if (updatedTaskResult.rows.length === 0) {
-      return res.status(404).json({
-        error: "Task not found",
-      });
-    }
-
-    return res.json({
-      message: "Task status updated successfully",
-      task: updatedTaskResult.rows[0],
-    });
-  } catch (error) {
-    console.error("Failed to update task status:", error);
-
-    return res.status(500).json({
-      error: "Failed to update task status",
-    });
-  }
-});
-
-app.post("/api/tasks/:taskId/reschedule", async (req, res) => {
-  const client = await pool.connect();
-  let transactionStarted = false;
-
-  try {
-    const { taskId } = req.params;
-
-    const taskResult = await client.query(
-      `SELECT
-         tasks.*,
-         goals.id AS goal_id,
-         goals.user_id,
-         goals.target_date
-       FROM tasks
-       JOIN topics
-         ON tasks.topic_id = topics.id
-       JOIN milestones
-         ON topics.milestone_id = milestones.id
-       JOIN goals
-         ON milestones.goal_id = goals.id
-       WHERE tasks.id = $1`,
-      [taskId]
-    );
-
-    const task = taskResult.rows[0];
-
-    if (!task) {
-      return res.status(404).json({
-        error: "Task not found",
-      });
-    }
-
-    if (task.status !== "skipped") {
-      return res.status(400).json({
-        error: "Only skipped tasks can be rescheduled.",
-      });
-    }
-
-    const existingReplacementResult = await client.query(
-      `SELECT id
-       FROM tasks
-       WHERE topic_id = $1
-         AND task_text = $2
-         AND status = 'pending'
-       LIMIT 1`,
-      [
-        task.topic_id,
-        `${task.task_text} (Rescheduled)`,
-      ]
-    );
-
-    if (existingReplacementResult.rows.length > 0) {
-      return res.status(409).json({
-        error: "This skipped task has already been rescheduled.",
-      });
-    }
-
-    const availabilityResult = await client.query(
-      `SELECT *
-       FROM availability
-       WHERE user_id = $1
-       ORDER BY id`,
-      [task.user_id]
-    );
-
-    const availability = availabilityResult.rows;
-
-    const availabilityValidation =
-      validateAvailability(availability);
-
-    if (!availabilityValidation.valid) {
-      return res.status(400).json({
-        error: availabilityValidation.error,
-      });
-    }
-
-    const workloadResult = await client.query(
-      `SELECT
-         tasks.scheduled_date,
-         SUM(tasks.estimated_minutes) AS allocated_minutes
-       FROM tasks
-       JOIN topics
-         ON tasks.topic_id = topics.id
-       JOIN milestones
-         ON topics.milestone_id = milestones.id
-       WHERE milestones.goal_id = $1
-         AND tasks.status <> 'skipped'
-         AND tasks.id <> $2
-       GROUP BY tasks.scheduled_date
-       ORDER BY tasks.scheduled_date`,
-      [task.goal_id, taskId]
-    );
-
-    const workloadByDate = new Map(
-      workloadResult.rows.map((row) => {
-        const date = normaliseDate(row.scheduled_date);
-
-        return [
-          formatDate(date),
-          Number(row.allocated_minutes),
-        ];
-      })
-    );
-
-    const targetDate = normaliseDate(task.target_date);
-    const originalTaskDate = normaliseDate(
-      task.scheduled_date
-    );
-    const today = normaliseDate(new Date());
-
-    if (!targetDate || !originalTaskDate || !today) {
-      return res.status(400).json({
-        error: "The task contains an invalid date.",
-      });
-    }
-
-    const searchStartDate = new Date(originalTaskDate);
-    searchStartDate.setDate(searchStartDate.getDate() + 1);
-
-    if (searchStartDate < today) {
-      searchStartDate.setTime(today.getTime());
-    }
-
-    const slotResult = findNextAvailableDate({
-      startDate: searchStartDate,
-      targetDate,
-      availability,
-      workloadByDate,
-      requiredMinutes: Number(task.estimated_minutes),
-    });
-
-    if (!slotResult.found) {
-      return res.status(422).json({
-        error:
-          "The skipped task cannot fit into the remaining availability before the target date.",
-      });
-    }
-
-    await client.query("BEGIN");
-    transactionStarted = true;
-
-    const rescheduledTaskResult = await client.query(
-      `INSERT INTO tasks
-        (
-          topic_id,
-          scheduled_date,
-          task_text,
-          estimated_minutes,
-          status
-        )
-       VALUES ($1, $2, $3, $4, 'pending')
-       RETURNING *`,
-      [
-        task.topic_id,
-        slotResult.date,
-        `${task.task_text} (Rescheduled)`,
-        task.estimated_minutes,
-      ]
-    );
-
-    await client.query("COMMIT");
-    transactionStarted = false;
-
-    return res.status(201).json({
-      message:
-        "Skipped task rescheduled within the available daily workload.",
-      original_task: task,
-      new_task: rescheduledTaskResult.rows[0],
-      capacity: {
-        date: slotResult.date,
-        daily_capacity: slotResult.dailyCapacity,
-        previously_allocated:
-          slotResult.allocatedMinutes,
-        allocated_after_rescheduling:
-          slotResult.allocatedMinutes +
-          Number(task.estimated_minutes),
-        remaining_after_rescheduling:
-          slotResult.remainingCapacity -
-          Number(task.estimated_minutes),
-      },
-    });
-  } catch (error) {
-    if (transactionStarted) {
-      await client.query("ROLLBACK");
-    }
-
-    console.error("Failed to reschedule task:", error);
-
-    return res.status(500).json({
-      error: "Failed to reschedule task",
-    });
-  } finally {
-    client.release();
-  }
-});
-
+/*
+ * Creates a new learning goal.
+ */
 app.post("/api/goals", async (req, res) => {
   try {
     const {
@@ -583,7 +152,8 @@ app.post("/api/goals", async (req, res) => {
 
     if (parsedTargetDate < today) {
       return res.status(400).json({
-        error: "The target date must be in the future.",
+        error:
+          "The target date must be today or a future date.",
       });
     }
 
@@ -630,6 +200,9 @@ app.post("/api/goals", async (req, res) => {
   }
 });
 
+/*
+ * Creates a milestone belonging to a goal.
+ */
 app.post(
   "/api/goals/:goalId/milestones",
   async (req, res) => {
@@ -672,10 +245,8 @@ app.post(
            COALESCE(
              $3,
              (
-               SELECT COALESCE(
-                 MAX(sequence_order),
-                 0
-               ) + 1
+               SELECT
+                 COALESCE(MAX(sequence_order), 0) + 1
                FROM milestones
                WHERE goal_id = $1
              )
@@ -706,6 +277,9 @@ app.post(
   }
 );
 
+/*
+ * Creates a topic belonging to a milestone.
+ */
 app.post(
   "/api/milestones/:milestoneId/topics",
   async (req, res) => {
@@ -764,10 +338,8 @@ app.post(
            COALESCE(
              $4,
              (
-               SELECT COALESCE(
-                 MAX(sequence_order),
-                 0
-               ) + 1
+               SELECT
+                 COALESCE(MAX(sequence_order), 0) + 1
                FROM topics
                WHERE milestone_id = $1
              )
@@ -796,13 +368,16 @@ app.post(
   }
 );
 
+/*
+ * Retrieves a user's weekly availability.
+ */
 app.get(
   "/api/users/:userId/availability",
   async (req, res) => {
     try {
       const { userId } = req.params;
 
-      const result = await pool.query(
+      const availabilityResult = await pool.query(
         `SELECT *
          FROM availability
          WHERE user_id = $1
@@ -810,7 +385,7 @@ app.get(
         [userId]
       );
 
-      return res.json(result.rows);
+      return res.json(availabilityResult.rows);
     } catch (error) {
       console.error(
         "Failed to fetch availability:",
@@ -824,6 +399,9 @@ app.get(
   }
 );
 
+/*
+ * Replaces a user's weekly availability.
+ */
 app.put(
   "/api/users/:userId/availability",
   async (req, res) => {
@@ -851,8 +429,7 @@ app.put(
 
       if (uniqueDays.size !== availability.length) {
         return res.status(400).json({
-          error:
-            "Each weekday can only appear once.",
+          error: "Each weekday can only appear once.",
         });
       }
 
@@ -881,7 +458,7 @@ app.put(
       const savedAvailability = [];
 
       for (const entry of availability) {
-        const result = await client.query(
+        const availabilityResult = await client.query(
           `INSERT INTO availability
             (
               user_id,
@@ -897,7 +474,9 @@ app.put(
           ]
         );
 
-        savedAvailability.push(result.rows[0]);
+        savedAvailability.push(
+          availabilityResult.rows[0]
+        );
       }
 
       await client.query("COMMIT");
@@ -927,8 +506,611 @@ app.put(
   }
 );
 
+/*
+ * Generates a complete schedule for a goal.
+ */
+app.post(
+  "/api/goals/:goalId/generate-tasks",
+  async (req, res) => {
+    const client = await pool.connect();
+    let transactionStarted = false;
 
+    try {
+      const { goalId } = req.params;
+
+      const goalResult = await client.query(
+        `SELECT *
+         FROM goals
+         WHERE id = $1`,
+        [goalId]
+      );
+
+      const goal = goalResult.rows[0];
+
+      if (!goal) {
+        return res.status(404).json({
+          error: "Goal not found",
+        });
+      }
+
+      const today = normaliseDate(new Date());
+      const targetDate = normaliseDate(
+        goal.target_date
+      );
+
+      if (!targetDate) {
+        return res.status(400).json({
+          error:
+            "The goal has an invalid target date.",
+        });
+      }
+
+      if (targetDate < today) {
+        return res.status(400).json({
+          error:
+            "The target date must be today or a future date.",
+        });
+      }
+
+      const topicsResult = await client.query(
+        `SELECT topics.*
+         FROM topics
+         JOIN milestones
+           ON topics.milestone_id = milestones.id
+         WHERE milestones.goal_id = $1
+         ORDER BY
+           milestones.sequence_order,
+           topics.sequence_order`,
+        [goalId]
+      );
+
+      const topics = topicsResult.rows;
+
+      if (topics.length === 0) {
+        return res.status(400).json({
+          error:
+            "No topics have been added to this goal.",
+        });
+      }
+
+      const availabilityResult =
+        await client.query(
+          `SELECT *
+           FROM availability
+           WHERE user_id = $1
+           ORDER BY id`,
+          [goal.user_id]
+        );
+
+      const availability =
+        availabilityResult.rows;
+
+      const availabilityValidation =
+        validateAvailability(availability);
+
+      if (!availabilityValidation.valid) {
+        return res.status(400).json({
+          error: availabilityValidation.error,
+        });
+      }
+
+      const totalRequiredMinutes =
+        calculateRequiredMinutes(topics);
+
+      const totalAvailableMinutes =
+        calculateAvailableCapacity(
+          today,
+          targetDate,
+          availability
+        );
+
+      if (
+        totalAvailableMinutes <
+        totalRequiredMinutes
+      ) {
+        return res.status(422).json({
+          error:
+            "The remaining work cannot fit before the target date.",
+          required_minutes:
+            totalRequiredMinutes,
+          available_minutes:
+            totalAvailableMinutes,
+          remaining_minutes:
+            totalRequiredMinutes -
+            totalAvailableMinutes,
+        });
+      }
+
+      const scheduleResult = createSchedule({
+        topics,
+        availability,
+        startDate: today,
+        targetDate,
+      });
+
+      if (!scheduleResult.complete) {
+        return res.status(422).json({
+          error:
+            "The complete schedule could not be generated.",
+          tasks_created: 0,
+          remaining_minutes:
+            scheduleResult.remainingMinutes,
+        });
+      }
+
+      await client.query("BEGIN");
+      transactionStarted = true;
+
+      await client.query(
+        `DELETE FROM tasks
+         WHERE topic_id IN (
+           SELECT topics.id
+           FROM topics
+           JOIN milestones
+             ON topics.milestone_id = milestones.id
+           WHERE milestones.goal_id = $1
+         )`,
+        [goalId]
+      );
+
+      const generatedTasks = [];
+
+      for (const task of scheduleResult.tasks) {
+        const insertedTask =
+          await client.query(
+            `INSERT INTO tasks
+              (
+                topic_id,
+                scheduled_date,
+                task_text,
+                estimated_minutes,
+                status
+              )
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING *`,
+            [
+              task.topicId,
+              task.scheduledDate,
+              task.taskText,
+              task.estimatedMinutes,
+              task.status,
+            ]
+          );
+
+        generatedTasks.push(
+          insertedTask.rows[0]
+        );
+      }
+
+      await client.query("COMMIT");
+      transactionStarted = false;
+
+      return res.status(201).json({
+        message:
+          `${generatedTasks.length} tasks generated successfully`,
+        tasks_created: generatedTasks.length,
+        required_minutes:
+          totalRequiredMinutes,
+        available_minutes:
+          totalAvailableMinutes,
+        tasks: generatedTasks,
+      });
+    } catch (error) {
+      if (transactionStarted) {
+        await client.query("ROLLBACK");
+      }
+
+      console.error(
+        "Failed to generate tasks:",
+        error
+      );
+
+      return res.status(500).json({
+        error: "Failed to generate tasks",
+      });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+/*
+ * Retrieves all scheduled tasks for a goal.
+ */
+app.get(
+  "/api/goals/:goalId/tasks",
+  async (req, res) => {
+    try {
+      const { goalId } = req.params;
+
+      const tasksResult = await pool.query(
+        `SELECT tasks.*
+         FROM tasks
+         JOIN topics
+           ON tasks.topic_id = topics.id
+         JOIN milestones
+           ON topics.milestone_id = milestones.id
+         WHERE milestones.goal_id = $1
+         ORDER BY
+           tasks.scheduled_date,
+           tasks.id`,
+        [goalId]
+      );
+
+      return res.json(tasksResult.rows);
+    } catch (error) {
+      console.error(
+        "Failed to fetch tasks:",
+        error
+      );
+
+      return res.status(500).json({
+        error: "Failed to fetch tasks",
+      });
+    }
+  }
+);
+
+/*
+ * Updates a task's status.
+ */
+app.patch(
+  "/api/tasks/:taskId/status",
+  async (req, res) => {
+    try {
+      const { taskId } = req.params;
+      const { status } = req.body;
+
+      const allowedStatuses = [
+        "pending",
+        "completed",
+        "skipped",
+      ];
+
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({
+          error:
+            "Invalid status. Use pending, completed, or skipped.",
+        });
+      }
+
+      const updatedTaskResult =
+        await pool.query(
+          `UPDATE tasks
+           SET status = $1
+           WHERE id = $2
+           RETURNING *`,
+          [status, taskId]
+        );
+
+      if (
+        updatedTaskResult.rows.length === 0
+      ) {
+        return res.status(404).json({
+          error: "Task not found",
+        });
+      }
+
+      return res.json({
+        message:
+          "Task status updated successfully",
+        task: updatedTaskResult.rows[0],
+      });
+    } catch (error) {
+      console.error(
+        "Failed to update task status:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Failed to update task status",
+      });
+    }
+  }
+);
+
+/*
+ * Rebalances a skipped task together with future pending tasks.
+ */
+app.post(
+  "/api/tasks/:taskId/reschedule",
+  async (req, res) => {
+    const client = await pool.connect();
+    let transactionStarted = false;
+
+    try {
+      const { taskId } = req.params;
+
+      const skippedTaskResult =
+        await client.query(
+          `SELECT
+             tasks.*,
+             goals.id AS goal_id,
+             goals.user_id,
+             goals.target_date
+           FROM tasks
+           JOIN topics
+             ON tasks.topic_id = topics.id
+           JOIN milestones
+             ON topics.milestone_id = milestones.id
+           JOIN goals
+             ON milestones.goal_id = goals.id
+           WHERE tasks.id = $1`,
+          [taskId]
+        );
+
+      const skippedTask =
+        skippedTaskResult.rows[0];
+
+      if (!skippedTask) {
+        return res.status(404).json({
+          error: "Task not found.",
+        });
+      }
+
+      if (skippedTask.status !== "skipped") {
+        return res.status(400).json({
+          error:
+            "Only skipped tasks can be rescheduled.",
+        });
+      }
+
+      const existingReplacementResult =
+        await client.query(
+          `SELECT id
+           FROM tasks
+           WHERE topic_id = $1
+             AND task_text LIKE $2
+             AND status = 'pending'
+           LIMIT 1`,
+          [
+            skippedTask.topic_id,
+            `${skippedTask.task_text}%`,
+          ]
+        );
+
+      if (
+        existingReplacementResult.rows.length >
+        0
+      ) {
+        return res.status(409).json({
+          error:
+            "This skipped task has already been rescheduled.",
+        });
+      }
+
+      const availabilityResult =
+        await client.query(
+          `SELECT *
+           FROM availability
+           WHERE user_id = $1
+           ORDER BY id`,
+          [skippedTask.user_id]
+        );
+
+      const availability =
+        availabilityResult.rows;
+
+      const availabilityValidation =
+        validateAvailability(availability);
+
+      if (!availabilityValidation.valid) {
+        return res.status(400).json({
+          error:
+            availabilityValidation.error,
+        });
+      }
+
+      const targetDate = normaliseDate(
+        skippedTask.target_date
+      );
+
+      const skippedDate = normaliseDate(
+        skippedTask.scheduled_date
+      );
+
+      const today = normaliseDate(new Date());
+
+      if (
+        !targetDate ||
+        !skippedDate ||
+        !today
+      ) {
+        return res.status(400).json({
+          error:
+            "The task contains an invalid date.",
+        });
+      }
+
+      const searchStartDate =
+        new Date(skippedDate);
+
+      searchStartDate.setDate(
+        searchStartDate.getDate() + 1
+      );
+
+      if (searchStartDate < today) {
+        searchStartDate.setTime(
+          today.getTime()
+        );
+      }
+
+      const futurePendingResult =
+        await client.query(
+          `SELECT tasks.*
+           FROM tasks
+           JOIN topics
+             ON tasks.topic_id = topics.id
+           JOIN milestones
+             ON topics.milestone_id = milestones.id
+           WHERE milestones.goal_id = $1
+             AND tasks.status = 'pending'
+             AND (
+               tasks.scheduled_date > $2
+               OR (
+                 tasks.scheduled_date = $2
+                 AND tasks.id > $3
+               )
+             )
+           ORDER BY
+             tasks.scheduled_date,
+             tasks.id`,
+          [
+            skippedTask.goal_id,
+            skippedTask.scheduled_date,
+            skippedTask.id,
+          ]
+        );
+
+      const tasksToRebalance = [
+        skippedTask,
+        ...futurePendingResult.rows,
+      ];
+
+      const tasksToRebalanceIds =
+        tasksToRebalance.map(
+          (task) => task.id
+        );
+
+      const protectedWorkloadResult =
+        await client.query(
+          `SELECT
+             tasks.scheduled_date,
+             SUM(tasks.estimated_minutes)
+               AS allocated_minutes
+           FROM tasks
+           JOIN topics
+             ON tasks.topic_id = topics.id
+           JOIN milestones
+             ON topics.milestone_id = milestones.id
+           WHERE milestones.goal_id = $1
+             AND tasks.status <> 'skipped'
+             AND NOT (
+               tasks.id = ANY($2::int[])
+             )
+           GROUP BY tasks.scheduled_date`,
+          [
+            skippedTask.goal_id,
+            tasksToRebalanceIds,
+          ]
+        );
+
+      const workloadByDate = new Map(
+        protectedWorkloadResult.rows.map(
+          (row) => {
+            const date = normaliseDate(
+              row.scheduled_date
+            );
+
+            return [
+              formatDate(date),
+              Number(
+                row.allocated_minutes
+              ),
+            ];
+          }
+        )
+      );
+
+      const rebalanceResult =
+        rebalanceTasks({
+          tasks: tasksToRebalance,
+          availability,
+          workloadByDate,
+          startDate: searchStartDate,
+          targetDate,
+        });
+
+      if (!rebalanceResult.complete) {
+        return res.status(422).json({
+          error:
+            "The unfinished work cannot fit within the remaining availability before the target date.",
+          remaining_minutes:
+            rebalanceResult.remainingMinutes,
+        });
+      }
+
+      await client.query("BEGIN");
+      transactionStarted = true;
+
+      const futurePendingIds =
+        futurePendingResult.rows.map(
+          (task) => task.id
+        );
+
+      if (futurePendingIds.length > 0) {
+        await client.query(
+          `DELETE FROM tasks
+           WHERE id = ANY($1::int[])`,
+          [futurePendingIds]
+        );
+      }
+
+      const rebuiltTasks = [];
+
+      for (
+        const task of rebalanceResult.tasks
+      ) {
+        const insertedTask =
+          await client.query(
+            `INSERT INTO tasks
+              (
+                topic_id,
+                scheduled_date,
+                task_text,
+                estimated_minutes,
+                status
+              )
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING *`,
+            [
+              task.topicId,
+              task.scheduledDate,
+              task.taskText,
+              task.estimatedMinutes,
+              task.status,
+            ]
+          );
+
+        rebuiltTasks.push(
+          insertedTask.rows[0]
+        );
+      }
+
+      await client.query("COMMIT");
+      transactionStarted = false;
+
+      return res.status(201).json({
+        message:
+          "Skipped task and future pending work rebalanced successfully.",
+        original_skipped_task:
+          skippedTask,
+        removed_future_tasks:
+          futurePendingIds.length,
+        rebuilt_tasks: rebuiltTasks,
+      });
+    } catch (error) {
+      if (transactionStarted) {
+        await client.query("ROLLBACK");
+      }
+
+      console.error(
+        "Failed to rebalance tasks:",
+        error
+      );
+
+      return res.status(500).json({
+        error: "Failed to rebalance tasks.",
+      });
+    } finally {
+      client.release();
+    }
+  }
+);
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(
+    `Server running on port ${PORT}`
+  );
 });
