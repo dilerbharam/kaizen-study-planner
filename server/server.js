@@ -4,67 +4,22 @@ require("dotenv").config();
 
 const pool = require("./db");
 
+const {
+  dayMap,
+  normaliseDate,
+  formatDate,
+  validateAvailability,
+  calculateRequiredMinutes,
+  calculateAvailableCapacity,
+  createSchedule,
+  findNextAvailableDate,
+} = require("./services/schedulingService");
+
 const app = express();
+const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
-
-const PORT = process.env.PORT || 5000;
-
-const dayMap = {
-  Sunday: 0,
-  Monday: 1,
-  Tuesday: 2,
-  Wednesday: 3,
-  Thursday: 4,
-  Friday: 5,
-  Saturday: 6,
-};
-
-/**
- * Returns a Date set to midnight in the local timezone.
- */
-function normaliseDate(dateValue) {
-  const date = new Date(dateValue);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
-
-/**
- * Formats a Date as YYYY-MM-DD without converting it to UTC.
- */
-function formatDate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-/**
- * Calculates the total available study minutes between two dates.
- */
-function calculateAvailableCapacity(startDate, targetDate, availability) {
-  const availabilityByDay = new Map(
-    availability.map((day) => [
-      dayMap[day.day_of_week],
-      Number(day.available_minutes),
-    ])
-  );
-
-  let totalCapacity = 0;
-
-  for (
-    let date = new Date(startDate);
-    date <= targetDate;
-    date.setDate(date.getDate() + 1)
-  ) {
-    const availableMinutes = availabilityByDay.get(date.getDay()) || 0;
-    totalCapacity += availableMinutes;
-  }
-
-  return totalCapacity;
-}
 
 app.get("/", (req, res) => {
   res.send("Kaizen Study Planner API is running");
@@ -74,14 +29,14 @@ app.get("/test-db", async (req, res) => {
   try {
     const result = await pool.query("SELECT NOW()");
 
-    res.json({
+    return res.json({
       message: "Database connected successfully",
       time: result.rows[0].now,
     });
   } catch (error) {
-    console.error(error);
+    console.error("Database connection test failed:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       error: "Database connection failed",
     });
   }
@@ -91,16 +46,19 @@ app.get("/api/goals/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const goals = await pool.query(
-      "SELECT * FROM goals WHERE user_id = $1 ORDER BY id",
+    const goalsResult = await pool.query(
+      `SELECT *
+       FROM goals
+       WHERE user_id = $1
+       ORDER BY id`,
       [userId]
     );
 
-    res.json(goals.rows);
+    return res.json(goalsResult.rows);
   } catch (error) {
-    console.error(error);
+    console.error("Failed to fetch goals:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       error: "Failed to fetch goals",
     });
   }
@@ -111,7 +69,9 @@ app.get("/api/goals/:goalId/details", async (req, res) => {
     const { goalId } = req.params;
 
     const goalResult = await pool.query(
-      "SELECT * FROM goals WHERE id = $1",
+      `SELECT *
+       FROM goals
+       WHERE id = $1`,
       [goalId]
     );
 
@@ -145,7 +105,7 @@ app.get("/api/goals/:goalId/details", async (req, res) => {
       topics: topicsResult.rows,
     });
   } catch (error) {
-    console.error(error);
+    console.error("Failed to fetch goal details:", error);
 
     return res.status(500).json({
       error: "Failed to fetch goal details",
@@ -155,12 +115,15 @@ app.get("/api/goals/:goalId/details", async (req, res) => {
 
 app.post("/api/goals/:goalId/generate-tasks", async (req, res) => {
   const client = await pool.connect();
+  let transactionStarted = false;
 
   try {
     const { goalId } = req.params;
 
     const goalResult = await client.query(
-      "SELECT * FROM goals WHERE id = $1",
+      `SELECT *
+       FROM goals
+       WHERE id = $1`,
       [goalId]
     );
 
@@ -175,7 +138,7 @@ app.post("/api/goals/:goalId/generate-tasks", async (req, res) => {
     const today = normaliseDate(new Date());
     const targetDate = normaliseDate(goal.target_date);
 
-    if (Number.isNaN(targetDate.getTime())) {
+    if (!targetDate) {
       return res.status(400).json({
         error: "The goal has an invalid target date.",
       });
@@ -215,52 +178,54 @@ app.post("/api/goals/:goalId/generate-tasks", async (req, res) => {
 
     const availability = availabilityResult.rows;
 
-    if (availability.length === 0) {
+    const availabilityValidation =
+      validateAvailability(availability);
+
+    if (!availabilityValidation.valid) {
       return res.status(400).json({
-        error: "No availability has been configured for this user.",
+        error: availabilityValidation.error,
       });
     }
 
-    const invalidAvailability = availability.find(
-      (day) =>
-        dayMap[day.day_of_week] === undefined ||
-        Number(day.available_minutes) <= 0
-    );
+    const totalRequiredMinutes =
+      calculateRequiredMinutes(topics);
 
-    if (invalidAvailability) {
-      return res.status(400).json({
-        error:
-          "Availability contains an invalid day or non-positive number of minutes.",
-      });
-    }
-
-    const totalRequiredMinutes = topics.reduce(
-      (total, topic) => total + Number(topic.estimated_minutes),
-      0
-    );
-
-    const totalAvailableMinutes = calculateAvailableCapacity(
-      today,
-      targetDate,
-      availability
-    );
+    const totalAvailableMinutes =
+      calculateAvailableCapacity(
+        today,
+        targetDate,
+        availability
+      );
 
     if (totalAvailableMinutes < totalRequiredMinutes) {
       return res.status(422).json({
-        error: "The remaining work cannot fit before the target date.",
+        error:
+          "The remaining work cannot fit before the target date.",
         required_minutes: totalRequiredMinutes,
         available_minutes: totalAvailableMinutes,
-        remaining_minutes: totalRequiredMinutes - totalAvailableMinutes,
+        remaining_minutes:
+          totalRequiredMinutes - totalAvailableMinutes,
       });
     }
 
-    const availableDays = availability.map((day) => ({
-      dayNumber: dayMap[day.day_of_week],
-      availableMinutes: Number(day.available_minutes),
-      dayName: day.day_of_week,
-    }));
+    const scheduleResult = createSchedule({
+      topics,
+      availability,
+      startDate: today,
+      targetDate,
+    });
+
+    if (!scheduleResult.complete) {
+      return res.status(422).json({
+        error:
+          "The complete schedule could not be generated.",
+        tasks_created: 0,
+        remaining_minutes: scheduleResult.remainingMinutes,
+      });
+    }
 
     await client.query("BEGIN");
+    transactionStarted = true;
 
     await client.query(
       `DELETE FROM tasks
@@ -276,100 +241,32 @@ app.post("/api/goals/:goalId/generate-tasks", async (req, res) => {
 
     const generatedTasks = [];
 
-    let topicIndex = 0;
-    let remainingTopicMinutes = Number(topics[0].estimated_minutes);
-    let topicPart = 1;
-
-    for (
-      let date = new Date(today);
-      date <= targetDate && topicIndex < topics.length;
-      date.setDate(date.getDate() + 1)
-    ) {
-      const matchingAvailability = availableDays.find(
-        (day) => day.dayNumber === date.getDay()
+    for (const task of scheduleResult.tasks) {
+      const insertedTask = await client.query(
+        `INSERT INTO tasks
+          (
+            topic_id,
+            scheduled_date,
+            task_text,
+            estimated_minutes,
+            status
+          )
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [
+          task.topicId,
+          task.scheduledDate,
+          task.taskText,
+          task.estimatedMinutes,
+          task.status,
+        ]
       );
 
-      if (!matchingAvailability) {
-        continue;
-      }
-
-      let remainingDayMinutes = matchingAvailability.availableMinutes;
-
-      while (remainingDayMinutes > 0 && topicIndex < topics.length) {
-        const topic = topics[topicIndex];
-
-        const taskMinutes = Math.min(
-          remainingTopicMinutes,
-          remainingDayMinutes
-        );
-
-        const isSplitTask =
-          Number(topic.estimated_minutes) > taskMinutes || topicPart > 1;
-
-        const taskText = isSplitTask
-          ? `Study: ${topic.title} - Part ${topicPart}`
-          : `Study: ${topic.title}`;
-
-        const insertedTask = await client.query(
-          `INSERT INTO tasks
-            (
-              topic_id,
-              scheduled_date,
-              task_text,
-              estimated_minutes,
-              status
-            )
-           VALUES ($1, $2, $3, $4, 'pending')
-           RETURNING *`,
-          [
-            topic.id,
-            formatDate(date),
-            taskText,
-            taskMinutes,
-          ]
-        );
-
-        generatedTasks.push(insertedTask.rows[0]);
-
-        remainingDayMinutes -= taskMinutes;
-        remainingTopicMinutes -= taskMinutes;
-
-        if (remainingTopicMinutes === 0) {
-          topicIndex += 1;
-          topicPart = 1;
-
-          if (topicIndex < topics.length) {
-            remainingTopicMinutes = Number(
-              topics[topicIndex].estimated_minutes
-            );
-          }
-        } else {
-          topicPart += 1;
-        }
-      }
-    }
-
-    if (topicIndex < topics.length) {
-      await client.query("ROLLBACK");
-
-      const unallocatedMinutes =
-        remainingTopicMinutes +
-        topics
-          .slice(topicIndex + 1)
-          .reduce(
-            (total, topic) =>
-              total + Number(topic.estimated_minutes),
-            0
-          );
-
-      return res.status(422).json({
-        error: "The complete schedule could not be generated.",
-        tasks_created: 0,
-        remaining_minutes: unallocatedMinutes,
-      });
+      generatedTasks.push(insertedTask.rows[0]);
     }
 
     await client.query("COMMIT");
+    transactionStarted = false;
 
     return res.status(201).json({
       message: `${generatedTasks.length} tasks generated successfully`,
@@ -379,8 +276,11 @@ app.post("/api/goals/:goalId/generate-tasks", async (req, res) => {
       tasks: generatedTasks,
     });
   } catch (error) {
-    await client.query("ROLLBACK");
-    console.error(error);
+    if (transactionStarted) {
+      await client.query("ROLLBACK");
+    }
+
+    console.error("Failed to generate tasks:", error);
 
     return res.status(500).json({
       error: "Failed to generate tasks",
@@ -394,7 +294,7 @@ app.get("/api/goals/:goalId/tasks", async (req, res) => {
   try {
     const { goalId } = req.params;
 
-    const tasks = await pool.query(
+    const tasksResult = await pool.query(
       `SELECT tasks.*
        FROM tasks
        JOIN topics
@@ -406,11 +306,11 @@ app.get("/api/goals/:goalId/tasks", async (req, res) => {
       [goalId]
     );
 
-    res.json(tasks.rows);
+    return res.json(tasksResult.rows);
   } catch (error) {
-    console.error(error);
+    console.error("Failed to fetch tasks:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       error: "Failed to fetch tasks",
     });
   }
@@ -434,7 +334,7 @@ app.patch("/api/tasks/:taskId/status", async (req, res) => {
       });
     }
 
-    const updatedTask = await pool.query(
+    const updatedTaskResult = await pool.query(
       `UPDATE tasks
        SET status = $1
        WHERE id = $2
@@ -442,7 +342,7 @@ app.patch("/api/tasks/:taskId/status", async (req, res) => {
       [status, taskId]
     );
 
-    if (updatedTask.rows.length === 0) {
+    if (updatedTaskResult.rows.length === 0) {
       return res.status(404).json({
         error: "Task not found",
       });
@@ -450,10 +350,10 @@ app.patch("/api/tasks/:taskId/status", async (req, res) => {
 
     return res.json({
       message: "Task status updated successfully",
-      task: updatedTask.rows[0],
+      task: updatedTaskResult.rows[0],
     });
   } catch (error) {
-    console.error(error);
+    console.error("Failed to update task status:", error);
 
     return res.status(500).json({
       error: "Failed to update task status",
@@ -462,12 +362,16 @@ app.patch("/api/tasks/:taskId/status", async (req, res) => {
 });
 
 app.post("/api/tasks/:taskId/reschedule", async (req, res) => {
+  const client = await pool.connect();
+  let transactionStarted = false;
+
   try {
     const { taskId } = req.params;
 
-    const taskResult = await pool.query(
+    const taskResult = await client.query(
       `SELECT
          tasks.*,
+         goals.id AS goal_id,
          goals.user_id,
          goals.target_date
        FROM tasks
@@ -495,55 +399,110 @@ app.post("/api/tasks/:taskId/reschedule", async (req, res) => {
       });
     }
 
-    const availabilityResult = await pool.query(
+    const existingReplacementResult = await client.query(
+      `SELECT id
+       FROM tasks
+       WHERE topic_id = $1
+         AND task_text = $2
+         AND status = 'pending'
+       LIMIT 1`,
+      [
+        task.topic_id,
+        `${task.task_text} (Rescheduled)`,
+      ]
+    );
+
+    if (existingReplacementResult.rows.length > 0) {
+      return res.status(409).json({
+        error: "This skipped task has already been rescheduled.",
+      });
+    }
+
+    const availabilityResult = await client.query(
       `SELECT *
        FROM availability
-       WHERE user_id = $1`,
+       WHERE user_id = $1
+       ORDER BY id`,
       [task.user_id]
     );
 
     const availability = availabilityResult.rows;
 
-    if (availability.length === 0) {
+    const availabilityValidation =
+      validateAvailability(availability);
+
+    if (!availabilityValidation.valid) {
       return res.status(400).json({
-        error: "No availability found for this user.",
+        error: availabilityValidation.error,
       });
     }
 
-    const availabilityByDay = new Map(
-      availability.map((day) => [
-        dayMap[day.day_of_week],
-        Number(day.available_minutes),
-      ])
+    const workloadResult = await client.query(
+      `SELECT
+         tasks.scheduled_date,
+         SUM(tasks.estimated_minutes) AS allocated_minutes
+       FROM tasks
+       JOIN topics
+         ON tasks.topic_id = topics.id
+       JOIN milestones
+         ON topics.milestone_id = milestones.id
+       WHERE milestones.goal_id = $1
+         AND tasks.status <> 'skipped'
+         AND tasks.id <> $2
+       GROUP BY tasks.scheduled_date
+       ORDER BY tasks.scheduled_date`,
+      [task.goal_id, taskId]
+    );
+
+    const workloadByDate = new Map(
+      workloadResult.rows.map((row) => {
+        const date = normaliseDate(row.scheduled_date);
+
+        return [
+          formatDate(date),
+          Number(row.allocated_minutes),
+        ];
+      })
     );
 
     const targetDate = normaliseDate(task.target_date);
-    const newDate = normaliseDate(task.scheduled_date);
+    const originalTaskDate = normaliseDate(
+      task.scheduled_date
+    );
+    const today = normaliseDate(new Date());
 
-    newDate.setDate(newDate.getDate() + 1);
-
-    let suitableDateFound = false;
-
-    while (newDate <= targetDate) {
-      const dailyCapacity =
-        availabilityByDay.get(newDate.getDay()) || 0;
-
-      if (dailyCapacity > 0) {
-        suitableDateFound = true;
-        break;
-      }
-
-      newDate.setDate(newDate.getDate() + 1);
-    }
-
-    if (!suitableDateFound) {
-      return res.status(422).json({
-        error:
-          "The skipped task cannot be rescheduled before the target date.",
+    if (!targetDate || !originalTaskDate || !today) {
+      return res.status(400).json({
+        error: "The task contains an invalid date.",
       });
     }
 
-    const rescheduledTask = await pool.query(
+    const searchStartDate = new Date(originalTaskDate);
+    searchStartDate.setDate(searchStartDate.getDate() + 1);
+
+    if (searchStartDate < today) {
+      searchStartDate.setTime(today.getTime());
+    }
+
+    const slotResult = findNextAvailableDate({
+      startDate: searchStartDate,
+      targetDate,
+      availability,
+      workloadByDate,
+      requiredMinutes: Number(task.estimated_minutes),
+    });
+
+    if (!slotResult.found) {
+      return res.status(422).json({
+        error:
+          "The skipped task cannot fit into the remaining availability before the target date.",
+      });
+    }
+
+    await client.query("BEGIN");
+    transactionStarted = true;
+
+    const rescheduledTaskResult = await client.query(
       `INSERT INTO tasks
         (
           topic_id,
@@ -556,23 +515,45 @@ app.post("/api/tasks/:taskId/reschedule", async (req, res) => {
        RETURNING *`,
       [
         task.topic_id,
-        formatDate(newDate),
+        slotResult.date,
         `${task.task_text} (Rescheduled)`,
         task.estimated_minutes,
       ]
     );
 
+    await client.query("COMMIT");
+    transactionStarted = false;
+
     return res.status(201).json({
-      message: "Skipped task rescheduled successfully",
+      message:
+        "Skipped task rescheduled within the available daily workload.",
       original_task: task,
-      new_task: rescheduledTask.rows[0],
+      new_task: rescheduledTaskResult.rows[0],
+      capacity: {
+        date: slotResult.date,
+        daily_capacity: slotResult.dailyCapacity,
+        previously_allocated:
+          slotResult.allocatedMinutes,
+        allocated_after_rescheduling:
+          slotResult.allocatedMinutes +
+          Number(task.estimated_minutes),
+        remaining_after_rescheduling:
+          slotResult.remainingCapacity -
+          Number(task.estimated_minutes),
+      },
     });
   } catch (error) {
-    console.error(error);
+    if (transactionStarted) {
+      await client.query("ROLLBACK");
+    }
+
+    console.error("Failed to reschedule task:", error);
 
     return res.status(500).json({
       error: "Failed to reschedule task",
     });
+  } finally {
+    client.release();
   }
 });
 
