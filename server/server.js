@@ -17,6 +17,10 @@ const {
   rebalanceTasks,
 } = require("./services/rebalancingService");
 
+const {
+  calculateGoalProgress,
+} = require("./services/progressService");
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -746,6 +750,103 @@ app.get(
 
       return res.status(500).json({
         error: "Failed to fetch tasks",
+      });
+    }
+  }
+);
+
+/*
+ * Returns progress and feasibility information for a goal.
+ */
+app.get(
+  "/api/goals/:goalId/progress",
+  async (req, res) => {
+    try {
+      const { goalId } = req.params;
+
+      const goalResult = await pool.query(
+        `SELECT *
+         FROM goals
+         WHERE id = $1`,
+        [goalId]
+      );
+
+      const goal = goalResult.rows[0];
+
+      if (!goal) {
+        return res.status(404).json({
+          error: "Goal not found.",
+        });
+      }
+
+      const topicsResult = await pool.query(
+        `SELECT topics.*
+         FROM topics
+         JOIN milestones
+           ON topics.milestone_id = milestones.id
+         WHERE milestones.goal_id = $1
+         ORDER BY
+           milestones.sequence_order,
+           topics.sequence_order`,
+        [goalId]
+      );
+
+      const tasksResult = await pool.query(
+        `SELECT tasks.*
+         FROM tasks
+         JOIN topics
+           ON tasks.topic_id = topics.id
+         JOIN milestones
+           ON topics.milestone_id = milestones.id
+         WHERE milestones.goal_id = $1
+         ORDER BY
+           tasks.scheduled_date,
+           tasks.id`,
+        [goalId]
+      );
+
+      const availabilityResult =
+        await pool.query(
+          `SELECT *
+           FROM availability
+           WHERE user_id = $1
+           ORDER BY id`,
+          [goal.user_id]
+        );
+
+      const progress =
+        calculateGoalProgress({
+          topics: topicsResult.rows,
+          tasks: tasksResult.rows,
+          availability:
+            availabilityResult.rows,
+          targetDate: goal.target_date,
+        });
+
+      if (!progress.valid) {
+        return res.status(400).json({
+          error: progress.error,
+        });
+      }
+
+      return res.json({
+        goal: {
+          id: goal.id,
+          title: goal.title,
+          target_date: goal.target_date,
+          status: goal.status,
+        },
+        progress,
+      });
+    } catch (error) {
+      console.error(
+        "Failed to calculate goal progress:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Failed to calculate goal progress.",
       });
     }
   }

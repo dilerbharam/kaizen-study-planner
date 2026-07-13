@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import "./App.css";
 import api from "./services/api";
 import GoalSetupForm from "./components/GoalSetupForm";
+import ProgressDashboard from "./components/ProgressDashboard";
 
 function App() {
   const userId = 1;
@@ -10,16 +11,26 @@ function App() {
   const [selectedGoalId, setSelectedGoalId] =
     useState(null);
 
-  const [goalDetails, setGoalDetails] = useState(null);
+  const [goalDetails, setGoalDetails] =
+    useState(null);
   const [tasks, setTasks] = useState([]);
+
+  const [progressData, setProgressData] =
+    useState(null);
+  const [isProgressLoading, setIsProgressLoading] =
+    useState(false);
+  const [progressError, setProgressError] =
+    useState("");
 
   const [showSetupForm, setShowSetupForm] =
     useState(false);
 
   const [message, setMessage] = useState("");
-  const [messageType, setMessageType] = useState("");
+  const [messageType, setMessageType] =
+    useState("");
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] =
+    useState(true);
   const [isGenerating, setIsGenerating] =
     useState(false);
 
@@ -52,6 +63,8 @@ function App() {
     );
 
     setGoalDetails(response.data);
+
+    return response.data;
   };
 
   const fetchTasks = async (goalId) => {
@@ -60,12 +73,48 @@ function App() {
     );
 
     setTasks(response.data);
+
+    return response.data;
+  };
+
+  const fetchProgress = async (goalId) => {
+    if (!goalId) {
+      setProgressData(null);
+      return null;
+    }
+
+    setIsProgressLoading(true);
+    setProgressError("");
+
+    try {
+      const response = await api.get(
+        `/api/goals/${goalId}/progress`
+      );
+
+      setProgressData(response.data);
+
+      return response.data;
+    } catch (error) {
+      const errorMessage = getErrorMessage(
+        error,
+        "Goal progress could not be calculated."
+      );
+
+      setProgressError(errorMessage);
+      setProgressData(null);
+
+      return null;
+    } finally {
+      setIsProgressLoading(false);
+    }
   };
 
   const loadSelectedGoal = async (goalId) => {
     if (!goalId) {
       setGoalDetails(null);
       setTasks([]);
+      setProgressData(null);
+      setProgressError("");
       return;
     }
 
@@ -73,6 +122,7 @@ function App() {
       await Promise.all([
         fetchGoalDetails(goalId),
         fetchTasks(goalId),
+        fetchProgress(goalId),
       ]);
     } catch (error) {
       showError(
@@ -84,6 +134,17 @@ function App() {
     }
   };
 
+  const refreshGoalData = async () => {
+    if (!selectedGoalId) {
+      return;
+    }
+
+    await Promise.all([
+      fetchTasks(selectedGoalId),
+      fetchProgress(selectedGoalId),
+    ]);
+  };
+
   const loadApplication = async () => {
     setIsLoading(true);
 
@@ -91,9 +152,11 @@ function App() {
       const loadedGoals = await fetchGoals();
 
       if (loadedGoals.length > 0) {
-        const initialGoalId = loadedGoals[0].id;
+        const initialGoalId =
+          loadedGoals[0].id;
 
         setSelectedGoalId(initialGoalId);
+
         await loadSelectedGoal(initialGoalId);
       } else {
         setShowSetupForm(true);
@@ -110,31 +173,52 @@ function App() {
     }
   };
 
-  const handleGoalSelection = async (event) => {
-    const goalId = Number(event.target.value);
+  const handleGoalSelection = async (
+    event
+  ) => {
+    const goalId = Number(
+      event.target.value
+    );
 
     setSelectedGoalId(goalId);
     setMessage("");
+    setProgressData(null);
+    setProgressError("");
+
     await loadSelectedGoal(goalId);
   };
 
-  const handleGoalCreated = async (goalId) => {
-    const updatedGoals = await fetchGoals();
+  const handleGoalCreated = async (
+    goalId
+  ) => {
+    try {
+      const updatedGoals =
+        await fetchGoals();
 
-    setGoals(updatedGoals);
-    setSelectedGoalId(goalId);
-    setShowSetupForm(false);
+      setGoals(updatedGoals);
+      setSelectedGoalId(goalId);
+      setShowSetupForm(false);
 
-    await loadSelectedGoal(goalId);
+      await loadSelectedGoal(goalId);
 
-    showSuccess(
-      "Learning plan created. You can now generate its schedule."
-    );
+      showSuccess(
+        "Learning plan created. You can now generate its schedule."
+      );
+    } catch (error) {
+      showError(
+        getErrorMessage(
+          error,
+          "The new learning plan could not be loaded."
+        )
+      );
+    }
   };
 
   const generateTasks = async () => {
     if (!selectedGoalId) {
-      showError("Select a learning goal first.");
+      showError(
+        "Select a learning goal first."
+      );
       return;
     }
 
@@ -147,7 +231,8 @@ function App() {
       );
 
       showSuccess(response.data.message);
-      await fetchTasks(selectedGoalId);
+
+      await refreshGoalData();
     } catch (error) {
       showError(
         getErrorMessage(
@@ -160,7 +245,10 @@ function App() {
     }
   };
 
-  const updateTaskStatus = async (taskId, status) => {
+  const updateTaskStatus = async (
+    taskId,
+    status
+  ) => {
     setMessage("");
 
     try {
@@ -170,7 +258,8 @@ function App() {
       );
 
       showSuccess(response.data.message);
-      await fetchTasks(selectedGoalId);
+
+      await refreshGoalData();
     } catch (error) {
       showError(
         getErrorMessage(
@@ -190,7 +279,8 @@ function App() {
       );
 
       showSuccess(response.data.message);
-      await fetchTasks(selectedGoalId);
+
+      await refreshGoalData();
     } catch (error) {
       showError(
         getErrorMessage(
@@ -221,15 +311,17 @@ function App() {
           <h1>Kaizen Study Planner</h1>
 
           <p className="subtitle">
-            Adaptive micro-task planner for structured
-            learning
+            Adaptive micro-task planner for
+            structured learning
           </p>
         </div>
 
         <button
           type="button"
           onClick={() =>
-            setShowSetupForm((current) => !current)
+            setShowSetupForm(
+              (current) => !current
+            )
           }
         >
           {showSetupForm
@@ -239,7 +331,9 @@ function App() {
       </header>
 
       {message && (
-        <p className={`message ${messageType}`}>
+        <p
+          className={`message ${messageType}`}
+        >
           {message}
         </p>
       )}
@@ -247,10 +341,13 @@ function App() {
       {showSetupForm ? (
         <GoalSetupForm
           userId={userId}
-          onGoalCreated={handleGoalCreated}
+          onGoalCreated={
+            handleGoalCreated
+          }
           onCancel={
             goals.length > 0
-              ? () => setShowSetupForm(false)
+              ? () =>
+                  setShowSetupForm(false)
               : null
           }
         />
@@ -259,9 +356,14 @@ function App() {
           <section className="card goal-selector-card">
             <label>
               Selected learning goal
+
               <select
-                value={selectedGoalId || ""}
-                onChange={handleGoalSelection}
+                value={
+                  selectedGoalId || ""
+                }
+                onChange={
+                  handleGoalSelection
+                }
               >
                 {goals.map((goal) => (
                   <option
@@ -277,12 +379,17 @@ function App() {
 
           {goalDetails && (
             <section className="card">
-              <h2>{goalDetails.goal.title}</h2>
+              <h2>
+                {goalDetails.goal.title}
+              </h2>
 
               <p>
-                <strong>Target date:</strong>{" "}
+                <strong>
+                  Target date:
+                </strong>{" "}
                 {new Date(
-                  goalDetails.goal.target_date
+                  goalDetails.goal
+                    .target_date
                 ).toLocaleDateString()}
               </p>
 
@@ -296,7 +403,9 @@ function App() {
               <ol>
                 {goalDetails.milestones.map(
                   (milestone) => (
-                    <li key={milestone.id}>
+                    <li
+                      key={milestone.id}
+                    >
                       {milestone.title}
                     </li>
                   )
@@ -306,36 +415,53 @@ function App() {
               <h3>Topics</h3>
 
               <ul>
-                {goalDetails.topics.map((topic) => (
-                  <li key={topic.id}>
-                    {topic.title} —{" "}
-                    {topic.estimated_minutes} minutes
-                  </li>
-                ))}
+                {goalDetails.topics.map(
+                  (topic) => (
+                    <li key={topic.id}>
+                      {topic.title} —{" "}
+                      {
+                        topic.estimated_minutes
+                      }{" "}
+                      minutes
+                    </li>
+                  )
+                )}
               </ul>
             </section>
           )}
 
+          <ProgressDashboard
+            progressData={progressData}
+            loading={isProgressLoading}
+            error={progressError}
+          />
+
           <section className="card">
             <div className="section-header">
-              <h2>Generated Daily Tasks</h2>
+              <h2>
+                Generated Daily Tasks
+              </h2>
 
               <button
                 type="button"
                 onClick={generateTasks}
                 disabled={
-                  isGenerating || !selectedGoalId
+                  isGenerating ||
+                  !selectedGoalId
                 }
               >
                 {isGenerating
                   ? "Generating..."
-                  : "Regenerate Tasks"}
+                  : tasks.length === 0
+                    ? "Generate Tasks"
+                    : "Regenerate Tasks"}
               </button>
             </div>
 
             {tasks.length === 0 ? (
               <p>
-                No tasks have been generated for this goal.
+                No tasks have been
+                generated for this goal.
               </p>
             ) : (
               <div className="task-list">
@@ -345,13 +471,19 @@ function App() {
                     key={task.id}
                   >
                     <div>
-                      <h3>{task.task_text}</h3>
+                      <h3>
+                        {task.task_text}
+                      </h3>
 
                       <p>
                         {new Date(
                           task.scheduled_date
                         ).toLocaleDateString()}{" "}
-                        · {task.estimated_minutes} minutes
+                        ·{" "}
+                        {
+                          task.estimated_minutes
+                        }{" "}
+                        minutes
                       </p>
 
                       <span className="status">
@@ -360,41 +492,43 @@ function App() {
                     </div>
 
                     <div className="task-actions">
-                      <button
-                        type="button"
-                        disabled={
-                          task.status === "completed"
-                        }
-                        onClick={() =>
-                          updateTaskStatus(
-                            task.id,
-                            "completed"
-                          )
-                        }
-                      >
-                        Complete
-                      </button>
+                      {task.status ===
+                        "pending" && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateTaskStatus(
+                                task.id,
+                                "completed"
+                              )
+                            }
+                          >
+                            Complete
+                          </button>
 
-                      <button
-                        type="button"
-                        disabled={
-                          task.status === "skipped"
-                        }
-                        onClick={() =>
-                          updateTaskStatus(
-                            task.id,
-                            "skipped"
-                          )
-                        }
-                      >
-                        Skip
-                      </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateTaskStatus(
+                                task.id,
+                                "skipped"
+                              )
+                            }
+                          >
+                            Skip
+                          </button>
+                        </>
+                      )}
 
-                      {task.status === "skipped" && (
+                      {task.status ===
+                        "skipped" && (
                         <button
                           type="button"
                           onClick={() =>
-                            rescheduleTask(task.id)
+                            rescheduleTask(
+                              task.id
+                            )
                           }
                         >
                           Reschedule
