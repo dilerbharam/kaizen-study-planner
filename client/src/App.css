@@ -105,3 +105,312 @@ button:hover {
   padding: 10px;
   border-radius: 6px;
 }
+.main-header,
+.section-header,
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.form-section {
+  margin-top: 2rem;
+}
+
+.setup-card label,
+.goal-selector-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+
+.setup-card input,
+.goal-selector-card select {
+  padding: 0.75rem;
+  border: 1px solid #c7c7c7;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.milestone-editor {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid #dddddd;
+  border-radius: 10px;
+  background: #fafafa;
+}
+
+.topic-editor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin: 1rem 0;
+}
+
+.topic-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px auto;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.availability-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.availability-row {
+  display: grid;
+  grid-template-columns: 1fr 180px;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.8rem;
+  border: 1px solid #dddddd;
+  border-radius: 8px;
+}
+
+.availability-row.selected {
+  border-color: #2f295c;
+}
+
+.checkbox-label {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+}
+
+.primary-action {
+  margin-top: 2rem;
+  width: 100%;
+}
+
+.secondary-button {
+  background: #ededed;
+  color: #222222;
+}
+
+.danger-button {
+  background: #8d1b1b;
+}
+
+.message.error {
+  background: #ffe5e5;
+  color: #8d1b1b;
+}
+
+.message.success {
+  background: #e7f7ec;
+  color: #1d6a36;
+}
+
+@media (max-width: 750px) {
+  .main-header,
+  .section-header,
+  .editor-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .form-grid,
+  .topic-editor,
+  .availability-row {
+    grid-template-columns: 1fr;
+  }
+}
+.progress-dashboard {
+  margin-bottom: 24px;
+  padding: 24px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px
+    rgba(0, 0, 0, 0.08);
+}
+
+.progress-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.progress-heading h2 {
+  margin: 0 0 4px;
+}
+
+.progress-heading p {
+  margin: 0;
+  color: #626262;
+}
+
+.feasibility-badge {
+  display: inline-block;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.feasibility-on-track {
+  color: #176329;
+  background: #dff5e5;
+}
+
+.feasibility-completed {
+  color: #135f2d;
+  background: #d9f7e2;
+}
+
+.feasibility-at-risk {
+  color: #8a4b00;
+  background: #fff0cc;
+}
+
+.feasibility-deadline-passed {
+  color: #8d1d1d;
+  background: #fde0e0;
+}
+
+.progress-bar-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.progress-bar-track {
+  width: 100%;
+  height: 14px;
+  overflow: hidden;
+  background: #e8e8e8;
+  border-radius: 999px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: #159447;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.progress-stat-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.progress-stat-card {
+  padding: 16px;
+  background: #f6f7f8;
+  border: 1px solid #e4e6e8;
+  border-radius: 9px;
+}
+
+.progress-stat-card span {
+  display: block;
+  margin-bottom: 7px;
+  color: #616161;
+  font-size: 0.84rem;
+}
+
+.progress-stat-card strong {
+  font-size: 1.15rem;
+}
+
+.task-count-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.task-count-grid div {
+  padding: 14px;
+  text-align: center;
+  border: 1px solid #e2e2e2;
+  border-radius: 9px;
+}
+
+.task-count-grid strong,
+.task-count-grid span {
+  display: block;
+}
+
+.task-count-grid strong {
+  margin-bottom: 4px;
+  font-size: 1.25rem;
+}
+
+.task-count-grid span {
+  color: #626262;
+  font-size: 0.82rem;
+}
+
+.feasibility-message {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-left: 5px solid;
+  border-radius: 7px;
+}
+
+.feasibility-message p {
+  margin: 5px 0 0;
+}
+
+.feasibility-message-on-track,
+.feasibility-message-completed {
+  border-color: #159447;
+  background: #edf9f1;
+}
+
+.feasibility-message-at-risk {
+  border-color: #d78900;
+  background: #fff8e6;
+}
+
+.feasibility-message-deadline-passed {
+  border-color: #c62828;
+  background: #fff0f0;
+}
+
+.progress-error {
+  padding: 13px;
+  color: #8d1d1d;
+  background: #fff0f0;
+  border-left: 5px solid #c62828;
+  border-radius: 7px;
+}
+
+@media (max-width: 760px) {
+  .progress-stat-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .task-count-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .progress-heading {
+    flex-direction: column;
+  }
+}
+.rescheduled-label {
+  display: inline-block;
+  padding: 6px 10px;
+  color: #555;
+  background: #e9ecef;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
