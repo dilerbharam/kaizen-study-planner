@@ -4,8 +4,72 @@ import api from "./services/api";
 import GoalSetupForm from "./components/GoalSetupForm";
 import ProgressDashboard from "./components/ProgressDashboard";
 
+const DEFAULT_USER_ID = 1;
+
+const getErrorMessage = (error, fallback) =>
+  error.response?.data?.error || fallback;
+
+/**
+ * Loads the data required for the application's initial view.
+ *
+ * Keeping the asynchronous request outside the component effect means
+ * React state is updated only after external data has been retrieved.
+ */
+async function fetchInitialApplicationData() {
+  const goalsResponse = await api.get(
+    `/api/goals/${DEFAULT_USER_ID}`
+  );
+
+  const loadedGoals = goalsResponse.data;
+
+  if (loadedGoals.length === 0) {
+    return {
+      goals: [],
+      initialGoalId: null,
+      goalDetails: null,
+      tasks: [],
+      progressData: null,
+      progressError: "",
+    };
+  }
+
+  const initialGoalId = loadedGoals[0].id;
+
+  const [
+    goalDetailsResponse,
+    tasksResponse,
+    progressResult,
+  ] = await Promise.all([
+    api.get(`/api/goals/${initialGoalId}/details`),
+    api.get(`/api/goals/${initialGoalId}/tasks`),
+
+    api
+      .get(`/api/goals/${initialGoalId}/progress`)
+      .then((response) => ({
+        data: response.data,
+        error: "",
+      }))
+      .catch((error) => ({
+        data: null,
+        error: getErrorMessage(
+          error,
+          "Goal progress could not be calculated."
+        ),
+      })),
+  ]);
+
+  return {
+    goals: loadedGoals,
+    initialGoalId,
+    goalDetails: goalDetailsResponse.data,
+    tasks: tasksResponse.data,
+    progressData: progressResult.data,
+    progressError: progressResult.error,
+  };
+}
+
 function App() {
-  const userId = 1;
+  const userId = DEFAULT_USER_ID;
 
   const [goals, setGoals] = useState([]);
   const [selectedGoalId, setSelectedGoalId] =
@@ -14,7 +78,6 @@ function App() {
   const [goalDetails, setGoalDetails] =
     useState(null);
   const [tasks, setTasks] = useState([]);
-
   const [progressData, setProgressData] =
     useState(null);
   const [isProgressLoading, setIsProgressLoading] =
@@ -33,9 +96,6 @@ function App() {
     useState(true);
   const [isGenerating, setIsGenerating] =
     useState(false);
-
-  const getErrorMessage = (error, fallback) =>
-    error.response?.data?.error || fallback;
 
   const showSuccess = (text) => {
     setMessage(text);
@@ -102,7 +162,6 @@ function App() {
 
       setProgressError(errorMessage);
       setProgressData(null);
-
       return null;
     } finally {
       setIsProgressLoading(false);
@@ -143,34 +202,6 @@ function App() {
       fetchTasks(selectedGoalId),
       fetchProgress(selectedGoalId),
     ]);
-  };
-
-  const loadApplication = async () => {
-    setIsLoading(true);
-
-    try {
-      const loadedGoals = await fetchGoals();
-
-      if (loadedGoals.length > 0) {
-        const initialGoalId =
-          loadedGoals[0].id;
-
-        setSelectedGoalId(initialGoalId);
-
-        await loadSelectedGoal(initialGoalId);
-      } else {
-        setShowSetupForm(true);
-      }
-    } catch (error) {
-      showError(
-        getErrorMessage(
-          error,
-          "The application data could not be loaded."
-        )
-      );
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   const handleGoalSelection = async (
@@ -292,7 +323,59 @@ function App() {
   };
 
   useEffect(() => {
-    loadApplication();
+    let cancelled = false;
+
+    const initialiseApplication = async () => {
+      try {
+        const initialData =
+          await fetchInitialApplicationData();
+
+        if (cancelled) {
+          return;
+        }
+
+        setGoals(initialData.goals);
+        setSelectedGoalId(
+          initialData.initialGoalId
+        );
+        setGoalDetails(
+          initialData.goalDetails
+        );
+        setTasks(initialData.tasks);
+        setProgressData(
+          initialData.progressData
+        );
+        setProgressError(
+          initialData.progressError
+        );
+
+        if (initialData.goals.length === 0) {
+          setShowSetupForm(true);
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setMessage(
+          getErrorMessage(
+            error,
+            "The application data could not be loaded."
+          )
+        );
+        setMessageType("error");
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    initialiseApplication();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (isLoading) {
