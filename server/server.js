@@ -23,6 +23,10 @@ const {
   calculateRemainingTopics,
 } = require("./services/regenerationService");
 
+const {
+  evaluateRescheduleEligibility,
+} = require("./services/rescheduleEligibilityService");
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -1017,8 +1021,9 @@ app.post(
 /*
  * Retrieves tasks for a goal.
  *
- * can_reschedule is calculated by the backend so the
- * interface cannot offer duplicate rescheduling.
+ * Rescheduling eligibility is derived by the backend so the
+ * interface does not offer actions that the scheduling rules
+ * will subsequently reject.
  */
 app.get(
   "/api/goals/:goalId/tasks",
@@ -1029,46 +1034,43 @@ app.get(
       const tasksResult = await pool.query(
         `SELECT
            tasks.*,
-           CASE
-             WHEN tasks.status = 'skipped'
-               AND tasks.rescheduled_at IS NULL
-               AND NOT EXISTS (
-                 SELECT 1
-                 FROM tasks AS linked_replacement
-                 WHERE linked_replacement
-                         .rescheduled_from_task_id =
-                       tasks.id
-               )
-               AND NOT EXISTS (
-                 SELECT 1
-                 FROM tasks AS active_equivalent
-                 WHERE active_equivalent.topic_id =
-                       tasks.topic_id
-                   AND active_equivalent.status =
-                       'pending'
-                   AND regexp_replace(
-                         active_equivalent.task_text,
-                         '\\s+\\(Rescheduled\\)$',
-                         '',
-                         'i'
-                       )
-                       =
-                       regexp_replace(
-                         tasks.task_text,
-                         '\\s+\\(Rescheduled\\)$',
-                         '',
-                         'i'
-                       )
-               )
-             THEN TRUE
-             ELSE FALSE
-           END AS can_reschedule
+           goals.target_date,
+           EXISTS (
+             SELECT 1
+             FROM tasks AS linked_replacement
+             WHERE linked_replacement
+                     .rescheduled_from_task_id =
+                   tasks.id
+           ) AS has_linked_replacement,
+           EXISTS (
+             SELECT 1
+             FROM tasks AS active_equivalent
+             WHERE active_equivalent.topic_id =
+                   tasks.topic_id
+               AND active_equivalent.status =
+                   'pending'
+               AND regexp_replace(
+                     active_equivalent.task_text,
+                     '\\s+\\(Rescheduled\\)$',
+                     '',
+                     'i'
+                   )
+                   =
+                   regexp_replace(
+                     tasks.task_text,
+                     '\\s+\\(Rescheduled\\)$',
+                     '',
+                     'i'
+                   )
+           ) AS has_active_equivalent
          FROM tasks
          JOIN topics
            ON tasks.topic_id = topics.id
          JOIN milestones
            ON topics.milestone_id =
               milestones.id
+         JOIN goals
+           ON milestones.goal_id = goals.id
          WHERE milestones.goal_id = $1
          ORDER BY
            tasks.scheduled_date,
@@ -1076,7 +1078,35 @@ app.get(
         [goalId]
       );
 
-      return res.json(tasksResult.rows);
+      const tasks =
+        tasksResult.rows.map((task) => {
+          const eligibility =
+            evaluateRescheduleEligibility({
+              task,
+              targetDate: task.target_date,
+              hasLinkedReplacement:
+                task.has_linked_replacement,
+              hasActiveEquivalent:
+                task.has_active_equivalent,
+            });
+
+          const {
+            target_date,
+            has_linked_replacement,
+            has_active_equivalent,
+            ...taskData
+          } = task;
+
+          return {
+            ...taskData,
+            can_reschedule:
+              eligibility.canReschedule,
+            reschedule_status:
+              eligibility.status,
+          };
+        });
+
+      return res.json(tasks);
     } catch (error) {
       console.error(
         "Failed to fetch tasks:",
@@ -1270,6 +1300,10 @@ app.patch(
  *
  * Existing replacement tasks are protected so their
  * reschedule lineage is not deleted or changed.
+ *
+ * Eligibility is checked before rebalancing so the API
+ * rejects expired goals and duplicate replacement attempts
+ * consistently with the task-list capability information.
  */
 app.post(
   "/api/tasks/:taskId/reschedule",
@@ -1317,10 +1351,27 @@ app.post(
         });
       }
 
-      if (skippedTask.rescheduled_at) {
-        return res.status(409).json({
+      const targetDate =
+        normaliseDate(
+          skippedTask.target_date
+        );
+
+      const skippedDate =
+        normaliseDate(
+          skippedTask.scheduled_date
+        );
+
+      const today =
+        normaliseDate(new Date());
+
+      if (
+        !targetDate ||
+        !skippedDate ||
+        !today
+      ) {
+        return res.status(400).json({
           error:
-            "This skipped task has already been rescheduled.",
+            "The task contains an invalid date.",
         });
       }
 
@@ -1333,19 +1384,10 @@ app.post(
           [skippedTask.id]
         );
 
-      if (
-        existingLinkedReplacementResult.rows
-          .length > 0
-      ) {
-        return res.status(409).json({
-          error:
-            "This skipped task has already been rescheduled.",
-        });
-      }
-
       /*
-       * Prevent legacy duplicate skipped rows from creating
-       * extra pending work when equivalent work already exists.
+       * Prevent legacy duplicate skipped rows from
+       * creating extra pending work when equivalent
+       * work already exists.
        */
       const activeEquivalentResult =
         await client.query(
@@ -1373,12 +1415,61 @@ app.post(
           ]
         );
 
-      if (
-        activeEquivalentResult.rows.length > 0
-      ) {
-        return res.status(409).json({
+      const eligibility =
+        evaluateRescheduleEligibility({
+          task: skippedTask,
+          targetDate,
+          currentDate: today,
+          hasLinkedReplacement:
+            existingLinkedReplacementResult
+              .rows.length > 0,
+          hasActiveEquivalent:
+            activeEquivalentResult
+              .rows.length > 0,
+        });
+
+      if (!eligibility.canReschedule) {
+        if (
+          eligibility.status ===
+          "Replacement created"
+        ) {
+          return res.status(409).json({
+            error:
+              "This skipped task has already been rescheduled.",
+            reason:
+              "replacement-created",
+          });
+        }
+
+        if (
+          eligibility.status ===
+          "Covered by current schedule"
+        ) {
+          return res.status(409).json({
+            error:
+              "Equivalent pending work already exists for this skipped task.",
+            reason:
+              "covered-by-current-schedule",
+          });
+        }
+
+        if (
+          eligibility.status ===
+          "Deadline passed"
+        ) {
+          return res.status(422).json({
+            error:
+              "This task cannot be rescheduled because the goal deadline has passed.",
+            reason:
+              "deadline-passed",
+          });
+        }
+
+        return res.status(400).json({
           error:
-            "Equivalent pending work already exists for this skipped task.",
+            "This task cannot currently be rescheduled.",
+          reason:
+            "reschedule-unavailable",
         });
       }
 
@@ -1403,31 +1494,6 @@ app.post(
         return res.status(400).json({
           error:
             availabilityValidation.error,
-        });
-      }
-
-      const targetDate =
-        normaliseDate(
-          skippedTask.target_date
-        );
-
-      const skippedDate =
-        normaliseDate(
-          skippedTask.scheduled_date
-        );
-
-      const today = normaliseDate(
-        new Date()
-      );
-
-      if (
-        !targetDate ||
-        !skippedDate ||
-        !today
-      ) {
-        return res.status(400).json({
-          error:
-            "The task contains an invalid date.",
         });
       }
 

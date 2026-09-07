@@ -623,9 +623,10 @@ function App() {
                         "skipped" &&
                         !task.can_reschedule && (
                           <span className="rescheduled-label">
-                            {task.rescheduled_at
-                              ? "Replacement created"
-                              : "Covered by current schedule"}
+                            {task.reschedule_status ||
+                              (task.rescheduled_at
+                                ? "Replacement created"
+                                : "Covered by current schedule")}
                           </span>
                         )}
                     </div>
