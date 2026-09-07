@@ -1,8 +1,20 @@
 const express = require("express");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
 require("dotenv").config();
 
 const pool = require("./db");
+
+const authenticate =
+  require("./middleware/authenticate");
+
+const {
+  AUTH_COOKIE_NAME,
+  hashPassword,
+  verifyPassword,
+  createAuthToken,
+  getAuthCookieOptions,
+} = require("./services/authService");
 
 const {
   normaliseDate,
@@ -30,8 +42,19 @@ const {
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+const CLIENT_ORIGIN =
+  process.env.CLIENT_ORIGIN ||
+  "http://localhost:5173";
+
+app.use(
+  cors({
+    origin: CLIENT_ORIGIN,
+    credentials: true,
+  })
+);
+
 app.use(express.json());
+app.use(cookieParser());
 
 app.get("/", (req, res) => {
   res.send("Kaizen Study Planner API is running");
@@ -56,6 +79,287 @@ app.get("/test-db", async (req, res) => {
     });
   }
 });
+
+/*
+ * Creates a new authenticated user account.
+ */
+app.post(
+  "/api/auth/register",
+  async (req, res) => {
+    try {
+      const name =
+        String(req.body.name || "").trim();
+
+      const email =
+        String(req.body.email || "")
+          .trim()
+          .toLowerCase();
+
+      const password =
+        String(
+          req.body.password || ""
+        );
+
+      if (
+        !name ||
+        name.length > 100
+      ) {
+        return res.status(400).json({
+          error:
+            "Name is required and must be 100 characters or fewer.",
+        });
+      }
+
+      if (
+        !email ||
+        email.length > 150 ||
+        !email.includes("@")
+      ) {
+        return res.status(400).json({
+          error:
+            "Enter a valid email address.",
+        });
+      }
+
+      if (password.length < 10) {
+        return res.status(400).json({
+          error:
+            "Password must contain at least 10 characters.",
+        });
+      }
+
+      const existingUser =
+        await pool.query(
+          `SELECT id
+           FROM users
+           WHERE LOWER(email) = LOWER($1)`,
+          [email]
+        );
+
+      if (
+        existingUser.rows.length > 0
+      ) {
+        return res.status(409).json({
+          error:
+            "An account with this email already exists.",
+        });
+      }
+
+      const passwordHash =
+        await hashPassword(password);
+
+      const result =
+        await pool.query(
+          `INSERT INTO users
+            (
+              name,
+              email,
+              password_hash
+            )
+           VALUES ($1, $2, $3)
+           RETURNING
+             id,
+             name,
+             email,
+             created_at`,
+          [
+            name,
+            email,
+            passwordHash,
+          ]
+        );
+
+      const user = result.rows[0];
+
+      const token =
+        createAuthToken(user.id);
+
+      res.cookie(
+        AUTH_COOKIE_NAME,
+        token,
+        getAuthCookieOptions()
+      );
+
+      return res.status(201).json({
+        message:
+          "Account created successfully.",
+        user,
+      });
+    } catch (error) {
+      if (error.code === "23505") {
+        return res.status(409).json({
+          error:
+            "An account with this email already exists.",
+        });
+      }
+
+      console.error(
+        "Registration failed:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Account could not be created.",
+      });
+    }
+  }
+);
+
+/*
+ * Authenticates an existing user.
+ */
+app.post(
+  "/api/auth/login",
+  async (req, res) => {
+    try {
+      const email =
+        String(req.body.email || "")
+          .trim()
+          .toLowerCase();
+
+      const password =
+        String(
+          req.body.password || ""
+        );
+
+      if (!email || !password) {
+        return res.status(400).json({
+          error:
+            "Email and password are required.",
+        });
+      }
+
+      const result =
+        await pool.query(
+          `SELECT
+             id,
+             name,
+             email,
+             password_hash,
+             created_at
+           FROM users
+           WHERE LOWER(email) = LOWER($1)`,
+          [email]
+        );
+
+      const user = result.rows[0];
+
+      const passwordMatches =
+        user
+          ? await verifyPassword(
+              password,
+              user.password_hash
+            )
+          : false;
+
+      if (
+        !user ||
+        !passwordMatches
+      ) {
+        return res.status(401).json({
+          error:
+            "Invalid email or password.",
+        });
+      }
+
+      const token =
+        createAuthToken(user.id);
+
+      res.cookie(
+        AUTH_COOKIE_NAME,
+        token,
+        getAuthCookieOptions()
+      );
+
+      return res.json({
+        message:
+          "Login successful.",
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          created_at:
+            user.created_at,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Login failed:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Login could not be completed.",
+      });
+    }
+  }
+);
+
+/*
+ * Returns the currently authenticated user.
+ */
+app.get(
+  "/api/auth/me",
+  authenticate,
+  async (req, res) => {
+    try {
+      const result =
+        await pool.query(
+          `SELECT
+             id,
+             name,
+             email,
+             created_at
+           FROM users
+           WHERE id = $1`,
+          [req.user.id]
+        );
+
+      if (
+        result.rows.length === 0
+      ) {
+        return res.status(401).json({
+          error:
+            "Authenticated user no longer exists.",
+        });
+      }
+
+      return res.json({
+        user: result.rows[0],
+      });
+    } catch (error) {
+      console.error(
+        "Failed to retrieve authenticated user:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Authenticated user could not be retrieved.",
+      });
+    }
+  }
+);
+
+/*
+ * Ends the current authentication session.
+ */
+app.post(
+  "/api/auth/logout",
+  (req, res) => {
+    res.clearCookie(
+      AUTH_COOKIE_NAME,
+      getAuthCookieOptions()
+    );
+
+    return res.json({
+      message:
+        "Logout successful.",
+    });
+  }
+);
 
 /*
  * Retrieves all goals belonging to a user.
