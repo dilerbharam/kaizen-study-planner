@@ -253,6 +253,13 @@ function App() {
       return;
     }
 
+    if (progressData?.deadlinePassed) {
+      showError(
+        "Tasks cannot be generated because the goal deadline has passed."
+      );
+      return;
+    }
+
     setIsGenerating(true);
     setMessage("");
 
@@ -530,14 +537,17 @@ function App() {
                 onClick={generateTasks}
                 disabled={
                   isGenerating ||
-                  !selectedGoalId
+                  !selectedGoalId ||
+                  progressData?.deadlinePassed === true
                 }
               >
-                {isGenerating
-                  ? "Generating..."
-                  : tasks.length === 0
-                    ? "Generate Tasks"
-                    : "Regenerate Tasks"}
+                {progressData?.deadlinePassed
+                  ? "Deadline passed"
+                  : isGenerating
+                    ? "Generating..."
+                    : tasks.length === 0
+                      ? "Generate Tasks"
+                      : "Regenerate Tasks"}
               </button>
             </div>
 
