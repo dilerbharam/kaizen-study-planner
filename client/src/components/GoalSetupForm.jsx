@@ -22,7 +22,6 @@ const createEmptyMilestone = () => ({
 });
 
 function GoalSetupForm({
-  userId,
   onGoalCreated,
   onCancel,
 }) {
@@ -317,7 +316,6 @@ function GoalSetupForm({
         await api.post(
           "/api/goals",
           {
-            userId,
             title: title.trim(),
             targetDate,
           }

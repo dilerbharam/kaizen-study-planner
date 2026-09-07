@@ -17,6 +17,12 @@ const {
 } = require("./services/authService");
 
 const {
+  findOwnedGoal,
+  findOwnedMilestone,
+  findOwnedTask,
+} = require("./services/ownershipService");
+
+const {
   normaliseDate,
   formatDate,
   validateAvailability,
@@ -364,16 +370,14 @@ app.post(
 /*
  * Retrieves all goals belonging to a user.
  */
-app.get("/api/goals/:userId", async (req, res) => {
+app.get("/api/goals", authenticate, async (req, res) => {
   try {
-    const { userId } = req.params;
-
     const goalsResult = await pool.query(
       `SELECT *
        FROM goals
        WHERE user_id = $1
        ORDER BY id`,
-      [userId]
+      [req.user.id]
     );
 
     return res.json(goalsResult.rows);
@@ -391,18 +395,18 @@ app.get("/api/goals/:userId", async (req, res) => {
  */
 app.get(
   "/api/goals/:goalId/details",
+  authenticate,
   async (req, res) => {
     try {
       const { goalId } = req.params;
 
-      const goalResult = await pool.query(
-        `SELECT *
-         FROM goals
-         WHERE id = $1`,
-        [goalId]
+      const goal = await findOwnedGoal(
+        pool,
+        goalId,
+        req.user.id
       );
 
-      if (goalResult.rows.length === 0) {
+      if (!goal) {
         return res.status(404).json({
           error: "Goal not found",
         });
@@ -429,7 +433,7 @@ app.get(
       );
 
       return res.json({
-        goal: goalResult.rows[0],
+        goal,
         milestones: milestonesResult.rows,
         topics: topicsResult.rows,
       });
@@ -449,22 +453,20 @@ app.get(
 /*
  * Creates a new learning goal.
  */
-app.post("/api/goals", async (req, res) => {
+app.post("/api/goals", authenticate, async (req, res) => {
   try {
     const {
-      userId,
       title,
       targetDate,
     } = req.body;
 
     if (
-      !userId ||
       !title?.trim() ||
       !targetDate
     ) {
       return res.status(400).json({
         error:
-          "User ID, goal title and target date are required.",
+          "Goal title and target date are required.",
       });
     }
 
@@ -486,19 +488,6 @@ app.post("/api/goals", async (req, res) => {
       });
     }
 
-    const userResult = await pool.query(
-      `SELECT id
-       FROM users
-       WHERE id = $1`,
-      [userId]
-    );
-
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({
-        error: "User not found.",
-      });
-    }
-
     const goalResult = await pool.query(
       `INSERT INTO goals
         (
@@ -510,7 +499,7 @@ app.post("/api/goals", async (req, res) => {
        VALUES ($1, $2, $3, 'active')
        RETURNING *`,
       [
-        userId,
+        req.user.id,
         title.trim(),
         targetDate,
       ]
@@ -537,6 +526,7 @@ app.post("/api/goals", async (req, res) => {
  */
 app.post(
   "/api/goals/:goalId/milestones",
+  authenticate,
   async (req, res) => {
     try {
       const { goalId } = req.params;
@@ -552,14 +542,13 @@ app.post(
         });
       }
 
-      const goalResult = await pool.query(
-        `SELECT id
-         FROM goals
-         WHERE id = $1`,
-        [goalId]
+      const goal = await findOwnedGoal(
+        pool,
+        goalId,
+        req.user.id
       );
 
-      if (goalResult.rows.length === 0) {
+      if (!goal) {
         return res.status(404).json({
           error: "Goal not found.",
         });
@@ -621,6 +610,7 @@ app.post(
  */
 app.post(
   "/api/milestones/:milestoneId/topics",
+  authenticate,
   async (req, res) => {
     try {
       const { milestoneId } = req.params;
@@ -651,17 +641,14 @@ app.post(
         });
       }
 
-      const milestoneResult =
-        await pool.query(
-          `SELECT id
-           FROM milestones
-           WHERE id = $1`,
-          [milestoneId]
+      const milestone =
+        await findOwnedMilestone(
+          pool,
+          milestoneId,
+          req.user.id
         );
 
-      if (
-        milestoneResult.rows.length === 0
-      ) {
+      if (!milestone) {
         return res.status(404).json({
           error: "Milestone not found.",
         });
@@ -723,18 +710,18 @@ app.post(
  */
 app.get(
   "/api/goals/:goalId/availability",
+  authenticate,
   async (req, res) => {
     try {
       const { goalId } = req.params;
 
-      const goalResult = await pool.query(
-        `SELECT id
-         FROM goals
-         WHERE id = $1`,
-        [goalId]
+      const goal = await findOwnedGoal(
+        pool,
+        goalId,
+        req.user.id
       );
 
-      if (goalResult.rows.length === 0) {
+      if (!goal) {
         return res.status(404).json({
           error: "Goal not found.",
         });
@@ -771,6 +758,7 @@ app.get(
  */
 app.put(
   "/api/goals/:goalId/availability",
+  authenticate,
   async (req, res) => {
     const client = await pool.connect();
     let transactionStarted = false;
@@ -804,14 +792,11 @@ app.put(
         });
       }
 
-      const goalResult = await client.query(
-        `SELECT id, user_id
-         FROM goals
-         WHERE id = $1`,
-        [goalId]
+      const goal = await findOwnedGoal(
+        client,
+        goalId,
+        req.user.id
       );
-
-      const goal = goalResult.rows[0];
 
       if (!goal) {
         return res.status(404).json({
@@ -894,6 +879,7 @@ app.put(
  */
 app.post(
   "/api/goals/:goalId/generate-tasks",
+  authenticate,
   async (req, res) => {
     const client = await pool.connect();
     let transactionStarted = false;
@@ -901,14 +887,11 @@ app.post(
     try {
       const { goalId } = req.params;
 
-      const goalResult = await client.query(
-        `SELECT *
-         FROM goals
-         WHERE id = $1`,
-        [goalId]
+      const goal = await findOwnedGoal(
+        client,
+        goalId,
+        req.user.id
       );
-
-      const goal = goalResult.rows[0];
 
       if (!goal) {
         return res.status(404).json({
@@ -1331,9 +1314,22 @@ app.post(
  */
 app.get(
   "/api/goals/:goalId/tasks",
+  authenticate,
   async (req, res) => {
     try {
       const { goalId } = req.params;
+
+      const goal = await findOwnedGoal(
+        pool,
+        goalId,
+        req.user.id
+      );
+
+      if (!goal) {
+        return res.status(404).json({
+          error: "Goal not found.",
+        });
+      }
 
       const tasksResult = await pool.query(
         `SELECT
@@ -1429,18 +1425,16 @@ app.get(
  */
 app.get(
   "/api/goals/:goalId/progress",
+  authenticate,
   async (req, res) => {
     try {
       const { goalId } = req.params;
 
-      const goalResult = await pool.query(
-        `SELECT *
-         FROM goals
-         WHERE id = $1`,
-        [goalId]
+      const goal = await findOwnedGoal(
+        pool,
+        goalId,
+        req.user.id
       );
-
-      const goal = goalResult.rows[0];
 
       if (!goal) {
         return res.status(404).json({
@@ -1529,6 +1523,7 @@ app.get(
  */
 app.patch(
   "/api/tasks/:taskId/status",
+  authenticate,
   async (req, res) => {
     try {
       const { taskId } = req.params;
@@ -1546,15 +1541,12 @@ app.patch(
         });
       }
 
-      const taskResult = await pool.query(
-        `SELECT *
-         FROM tasks
-         WHERE id = $1`,
-        [taskId]
-      );
-
       const existingTask =
-        taskResult.rows[0];
+        await findOwnedTask(
+          pool,
+          taskId,
+          req.user.id
+        );
 
       if (!existingTask) {
         return res.status(404).json({
@@ -1611,6 +1603,7 @@ app.patch(
  */
 app.post(
   "/api/tasks/:taskId/reschedule",
+  authenticate,
   async (req, res) => {
     const client = await pool.connect();
     let transactionStarted = false;
@@ -1618,27 +1611,12 @@ app.post(
     try {
       const { taskId } = req.params;
 
-      const skippedTaskResult =
-        await client.query(
-          `SELECT
-             tasks.*,
-             goals.id AS goal_id,
-             goals.user_id,
-             goals.target_date
-           FROM tasks
-           JOIN topics
-             ON tasks.topic_id = topics.id
-           JOIN milestones
-             ON topics.milestone_id =
-                milestones.id
-           JOIN goals
-             ON milestones.goal_id = goals.id
-           WHERE tasks.id = $1`,
-          [taskId]
-        );
-
       const skippedTask =
-        skippedTaskResult.rows[0];
+        await findOwnedTask(
+          client,
+          taskId,
+          req.user.id
+        );
 
       if (!skippedTask) {
         return res.status(404).json({

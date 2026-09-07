@@ -1,23 +1,22 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 import api from "./services/api";
+import AuthForm from "./components/AuthForm";
 import GoalSetupForm from "./components/GoalSetupForm";
 import ProgressDashboard from "./components/ProgressDashboard";
-
-const DEFAULT_USER_ID = 1;
 
 const getErrorMessage = (error, fallback) =>
   error.response?.data?.error || fallback;
 
 /**
- * Loads the data required for the application's initial view.
+ * Loads the planner data for the currently authenticated user.
  *
- * Keeping the asynchronous request outside the component effect means
- * React state is updated only after external data has been retrieved.
+ * User identity is not supplied by the client. The backend derives
+ * ownership from the authenticated HTTP-only cookie.
  */
-async function fetchInitialApplicationData() {
+async function fetchPlannerData() {
   const goalsResponse = await api.get(
-    `/api/goals/${DEFAULT_USER_ID}`
+    "/api/goals"
   );
 
   const loadedGoals = goalsResponse.data;
@@ -40,11 +39,16 @@ async function fetchInitialApplicationData() {
     tasksResponse,
     progressResult,
   ] = await Promise.all([
-    api.get(`/api/goals/${initialGoalId}/details`),
-    api.get(`/api/goals/${initialGoalId}/tasks`),
-
+    api.get(
+      `/api/goals/${initialGoalId}/details`
+    ),
+    api.get(
+      `/api/goals/${initialGoalId}/tasks`
+    ),
     api
-      .get(`/api/goals/${initialGoalId}/progress`)
+      .get(
+        `/api/goals/${initialGoalId}/progress`
+      )
       .then((response) => ({
         data: response.data,
         error: "",
@@ -69,7 +73,8 @@ async function fetchInitialApplicationData() {
 }
 
 function App() {
-  const userId = DEFAULT_USER_ID;
+  const [currentUser, setCurrentUser] =
+    useState(null);
 
   const [goals, setGoals] = useState([]);
   const [selectedGoalId, setSelectedGoalId] =
@@ -107,9 +112,43 @@ function App() {
     setMessageType("error");
   };
 
+  const applyPlannerData = (
+    plannerData
+  ) => {
+    setGoals(plannerData.goals);
+    setSelectedGoalId(
+      plannerData.initialGoalId
+    );
+    setGoalDetails(
+      plannerData.goalDetails
+    );
+    setTasks(plannerData.tasks);
+    setProgressData(
+      plannerData.progressData
+    );
+    setProgressError(
+      plannerData.progressError
+    );
+    setShowSetupForm(
+      plannerData.goals.length === 0
+    );
+  };
+
+  const resetPlannerState = () => {
+    setGoals([]);
+    setSelectedGoalId(null);
+    setGoalDetails(null);
+    setTasks([]);
+    setProgressData(null);
+    setProgressError("");
+    setShowSetupForm(false);
+    setMessage("");
+    setMessageType("");
+  };
+
   const fetchGoals = async () => {
     const response = await api.get(
-      `/api/goals/${userId}`
+      "/api/goals"
     );
 
     setGoals(response.data);
@@ -184,6 +223,14 @@ function App() {
         fetchProgress(goalId),
       ]);
     } catch (error) {
+      if (
+        error.response?.status === 401
+      ) {
+        setCurrentUser(null);
+        resetPlannerState();
+        return;
+      }
+
       showError(
         getErrorMessage(
           error,
@@ -243,6 +290,54 @@ function App() {
         )
       );
     }
+  };
+
+  const handleAuthenticated = async (
+    user
+  ) => {
+    setIsLoading(true);
+    setCurrentUser(user);
+    setMessage("");
+    setMessageType("");
+
+    try {
+      const plannerData =
+        await fetchPlannerData();
+
+      applyPlannerData(plannerData);
+    } catch (error) {
+      if (
+        error.response?.status === 401
+      ) {
+        setCurrentUser(null);
+        resetPlannerState();
+        return;
+      }
+
+      showError(
+        getErrorMessage(
+          error,
+          "Planner data could not be loaded."
+        )
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await api.post("/api/auth/logout");
+    } catch {
+      /*
+       * Local state is still cleared if the server cannot be
+       * reached, so the interface does not continue displaying
+       * private planner data after logout is requested.
+       */
+    }
+
+    setCurrentUser(null);
+    resetPlannerState();
   };
 
   const generateTasks = async () => {
@@ -334,43 +429,68 @@ function App() {
 
     const initialiseApplication = async () => {
       try {
-        const initialData =
-          await fetchInitialApplicationData();
+        const authResponse =
+          await api.get("/api/auth/me");
 
         if (cancelled) {
           return;
         }
 
-        setGoals(initialData.goals);
+        const user =
+          authResponse.data.user;
+
+        const plannerData =
+          await fetchPlannerData();
+
+        if (cancelled) {
+          return;
+        }
+
+        setCurrentUser(user);
+        setGoals(plannerData.goals);
         setSelectedGoalId(
-          initialData.initialGoalId
+          plannerData.initialGoalId
         );
         setGoalDetails(
-          initialData.goalDetails
+          plannerData.goalDetails
         );
-        setTasks(initialData.tasks);
+        setTasks(plannerData.tasks);
         setProgressData(
-          initialData.progressData
+          plannerData.progressData
         );
         setProgressError(
-          initialData.progressError
+          plannerData.progressError
         );
-
-        if (initialData.goals.length === 0) {
-          setShowSetupForm(true);
-        }
+        setShowSetupForm(
+          plannerData.goals.length === 0
+        );
       } catch (error) {
         if (cancelled) {
           return;
         }
 
-        setMessage(
-          getErrorMessage(
-            error,
-            "The application data could not be loaded."
-          )
-        );
-        setMessageType("error");
+        if (
+          error.response?.status === 401
+        ) {
+          setCurrentUser(null);
+          setGoals([]);
+          setSelectedGoalId(null);
+          setGoalDetails(null);
+          setTasks([]);
+          setProgressData(null);
+          setProgressError("");
+          setShowSetupForm(false);
+          setMessage("");
+          setMessageType("");
+        } else {
+          setMessage(
+            getErrorMessage(
+              error,
+              "The application data could not be loaded."
+            )
+          );
+          setMessageType("error");
+        }
       } finally {
         if (!cancelled) {
           setIsLoading(false);
@@ -394,6 +514,16 @@ function App() {
     );
   }
 
+  if (!currentUser) {
+    return (
+      <AuthForm
+        onAuthenticated={
+          handleAuthenticated
+        }
+      />
+    );
+  }
+
   return (
     <main className="app-container">
       <header className="main-header">
@@ -404,25 +534,47 @@ function App() {
             Adaptive micro-task planner for
             structured learning
           </p>
+
+          <p>
+            Signed in as{" "}
+            <strong>
+              {currentUser.name}
+            </strong>
+          </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() =>
-            setShowSetupForm(
-              (current) => !current
-            )
-          }
-        >
-          {showSetupForm
-            ? "Return to Planner"
-            : "Create New Goal"}
-        </button>
+        <div className="task-actions">
+          <button
+            type="button"
+            onClick={() =>
+              setShowSetupForm(
+                (current) => !current
+              )
+            }
+          >
+            {showSetupForm
+              ? "Return to Planner"
+              : "Create New Goal"}
+          </button>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={handleLogout}
+          >
+            Log Out
+          </button>
+        </div>
       </header>
 
       {message && (
         <p
           className={`message ${messageType}`}
+          role={
+            messageType === "error"
+              ? "alert"
+              : "status"
+          }
         >
           {message}
         </p>
@@ -430,7 +582,6 @@ function App() {
 
       {showSetupForm ? (
         <GoalSetupForm
-          userId={userId}
           onGoalCreated={
             handleGoalCreated
           }
@@ -443,29 +594,40 @@ function App() {
         />
       ) : (
         <>
-          <section className="card goal-selector-card">
-            <label>
-              Selected learning goal
+          {goals.length > 0 ? (
+            <section className="card goal-selector-card">
+              <label>
+                Selected learning goal
 
-              <select
-                value={
-                  selectedGoalId || ""
-                }
-                onChange={
-                  handleGoalSelection
-                }
-              >
-                {goals.map((goal) => (
-                  <option
-                    key={goal.id}
-                    value={goal.id}
-                  >
-                    {goal.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </section>
+                <select
+                  value={
+                    selectedGoalId || ""
+                  }
+                  onChange={
+                    handleGoalSelection
+                  }
+                >
+                  {goals.map((goal) => (
+                    <option
+                      key={goal.id}
+                      value={goal.id}
+                    >
+                      {goal.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </section>
+          ) : (
+            <section className="card">
+              <h2>No learning plans yet</h2>
+              <p>
+                Create your first learning
+                plan to start scheduling
+                micro-tasks.
+              </p>
+            </section>
+          )}
 
           {goalDetails && (
             <section className="card">
@@ -520,131 +682,134 @@ function App() {
             </section>
           )}
 
-          <ProgressDashboard
-            progressData={progressData}
-            loading={isProgressLoading}
-            error={progressError}
-          />
+          {selectedGoalId && (
+            <ProgressDashboard
+              progressData={progressData}
+              loading={isProgressLoading}
+              error={progressError}
+            />
+          )}
 
-          <section className="card">
-            <div className="section-header">
-              <h2>
-                Generated Daily Tasks
-              </h2>
+          {selectedGoalId && (
+            <section className="card">
+              <div className="section-header">
+                <h2>
+                  Generated Daily Tasks
+                </h2>
 
-              <button
-                type="button"
-                onClick={generateTasks}
-                disabled={
-                  isGenerating ||
-                  !selectedGoalId ||
-                  progressData?.deadlinePassed === true
-                }
-              >
-                {progressData?.deadlinePassed
-                  ? "Deadline passed"
-                  : isGenerating
-                    ? "Generating..."
-                    : tasks.length === 0
-                      ? "Generate Tasks"
-                      : "Regenerate Tasks"}
-              </button>
-            </div>
-
-            {tasks.length === 0 ? (
-              <p>
-                No tasks have been
-                generated for this goal.
-              </p>
-            ) : (
-              <div className="task-list">
-                {tasks.map((task) => (
-                  <article
-                    className={`task-card ${task.status}`}
-                    key={task.id}
-                  >
-                    <div>
-                      <h3>
-                        {task.task_text}
-                      </h3>
-
-                      <p>
-                        {new Date(
-                          task.scheduled_date
-                        ).toLocaleDateString()}{" "}
-                        ·{" "}
-                        {
-                          task.estimated_minutes
-                        }{" "}
-                        minutes
-                      </p>
-
-                      <span className="status">
-                        {task.status}
-                      </span>
-                    </div>
-
-                    <div className="task-actions">
-                      {task.status ===
-                        "pending" && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              updateTaskStatus(
-                                task.id,
-                                "completed"
-                              )
-                            }
-                          >
-                            Complete
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              updateTaskStatus(
-                                task.id,
-                                "skipped"
-                              )
-                            }
-                          >
-                            Skip
-                          </button>
-                        </>
-                      )}
-
-                      {task.status ===
-                        "skipped" &&
-                        task.can_reschedule && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              rescheduleTask(
-                                task.id
-                              )
-                            }
-                          >
-                            Reschedule
-                          </button>
-                        )}
-
-                      {task.status ===
-                        "skipped" &&
-                        !task.can_reschedule && (
-                          <span className="rescheduled-label">
-                            {task.reschedule_status ||
-                              (task.rescheduled_at
-                                ? "Replacement created"
-                                : "Covered by current schedule")}
-                          </span>
-                        )}
-                    </div>
-                  </article>
-                ))}
+                <button
+                  type="button"
+                  onClick={generateTasks}
+                  disabled={
+                    isGenerating ||
+                    progressData?.deadlinePassed === true
+                  }
+                >
+                  {progressData?.deadlinePassed
+                    ? "Deadline passed"
+                    : isGenerating
+                      ? "Generating..."
+                      : tasks.length === 0
+                        ? "Generate Tasks"
+                        : "Regenerate Tasks"}
+                </button>
               </div>
-            )}
-          </section>
+
+              {tasks.length === 0 ? (
+                <p>
+                  No tasks have been
+                  generated for this goal.
+                </p>
+              ) : (
+                <div className="task-list">
+                  {tasks.map((task) => (
+                    <article
+                      className={`task-card ${task.status}`}
+                      key={task.id}
+                    >
+                      <div>
+                        <h3>
+                          {task.task_text}
+                        </h3>
+
+                        <p>
+                          {new Date(
+                            task.scheduled_date
+                          ).toLocaleDateString()}{" "}
+                          ·{" "}
+                          {
+                            task.estimated_minutes
+                          }{" "}
+                          minutes
+                        </p>
+
+                        <span className="status">
+                          {task.status}
+                        </span>
+                      </div>
+
+                      <div className="task-actions">
+                        {task.status ===
+                          "pending" && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateTaskStatus(
+                                  task.id,
+                                  "completed"
+                                )
+                              }
+                            >
+                              Complete
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateTaskStatus(
+                                  task.id,
+                                  "skipped"
+                                )
+                              }
+                            >
+                              Skip
+                            </button>
+                          </>
+                        )}
+
+                        {task.status ===
+                          "skipped" &&
+                          task.can_reschedule && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                rescheduleTask(
+                                  task.id
+                                )
+                              }
+                            >
+                              Reschedule
+                            </button>
+                          )}
+
+                        {task.status ===
+                          "skipped" &&
+                          !task.can_reschedule && (
+                            <span className="rescheduled-label">
+                              {task.reschedule_status ||
+                                (task.rescheduled_at
+                                  ? "Replacement created"
+                                  : "Covered by current schedule")}
+                            </span>
+                          )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
         </>
       )}
     </main>
