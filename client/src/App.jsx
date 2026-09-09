@@ -4,6 +4,7 @@ import api from "./services/api";
 import AuthForm from "./components/AuthForm";
 import GoalSetupForm from "./components/GoalSetupForm";
 import ProgressDashboard from "./components/ProgressDashboard";
+import AvailabilityManager from "./components/AvailabilityManager";
 
 const getErrorMessage = (error, fallback) =>
   error.response?.data?.error || fallback;
@@ -687,6 +688,18 @@ function App() {
               progressData={progressData}
               loading={isProgressLoading}
               error={progressError}
+            />
+          )}
+          {selectedGoalId && goalDetails && (
+            <AvailabilityManager
+              goalId={selectedGoalId}
+              targetDate={
+                goalDetails.goal.target_date
+              }
+              progressData={progressData}
+              onPlannerChanged={
+                refreshGoalData
+              }
             />
           )}
 
