@@ -4,6 +4,7 @@ import api from "./services/api";
 import AuthForm from "./components/AuthForm";
 import GoalSetupForm from "./components/GoalSetupForm";
 import ProgressDashboard from "./components/ProgressDashboard";
+import TaskCompletionForm from "./components/TaskCompletionForm";
 import AvailabilityManager from "./components/AvailabilityManager";
 
 const getErrorMessage = (error, fallback) =>
@@ -381,19 +382,24 @@ function App() {
 
   const updateTaskStatus = async (
     taskId,
-    status
+    status,
+    completionFeedback = null
   ) => {
     setMessage("");
 
     try {
       const response = await api.patch(
         `/api/tasks/${taskId}/status`,
-        { status }
+        {
+          status,
+          ...(completionFeedback || {}),
+        }
       );
 
       showSuccess(response.data.message);
-
       await refreshGoalData();
+
+      return true;
     } catch (error) {
       showError(
         getErrorMessage(
@@ -401,6 +407,8 @@ function App() {
           "The task status could not be updated."
         )
       );
+
+      return false;
     }
   };
 
@@ -755,6 +763,22 @@ function App() {
                           }{" "}
                           minutes
                         </p>
+                        {task.status ===
+                          "completed" &&
+                          task.actual_minutes && (
+                            <p className="task-feedback-summary">
+                              Actual:{" "}
+                              {
+                                task.actual_minutes
+                              }{" "}
+                              min · Difficulty:{" "}
+                              {
+                                task.difficulty_rating
+                              }
+                              /5
+                            </p>
+                          )}
+
 
                         <span className="status">
                           {task.status}
@@ -765,17 +789,18 @@ function App() {
                         {task.status ===
                           "pending" && (
                           <>
-                            <button
-                              type="button"
-                              onClick={() =>
+                            <TaskCompletionForm
+                              task={task}
+                              onComplete={(
+                                feedback
+                              ) =>
                                 updateTaskStatus(
                                   task.id,
-                                  "completed"
+                                  "completed",
+                                  feedback
                                 )
                               }
-                            >
-                              Complete
-                            </button>
+                            />
 
                             <button
                               type="button"

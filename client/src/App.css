@@ -1086,3 +1086,75 @@ p {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Feature 3: completion feedback */
+
+.completion-feedback-form {
+  width: min(430px, 70vw);
+  padding: 14px;
+  background: #ffffff;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+}
+
+.completion-feedback-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.completion-feedback-heading span {
+  color: var(--text-muted);
+  font-weight: 650;
+}
+
+.completion-feedback-fields {
+  display: grid;
+  grid-template-columns:
+    minmax(120px, 0.8fr)
+    minmax(170px, 1fr);
+  gap: 10px;
+}
+
+.completion-feedback-fields label {
+  font-size: 0.75rem;
+}
+
+.completion-feedback-fields input,
+.completion-feedback-fields select {
+  min-height: 38px;
+  padding: 7px 9px;
+}
+
+.completion-feedback-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.completion-feedback-error {
+  margin: 10px 0 0;
+  color: #991b1b;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.task-feedback-summary {
+  color: #166534 !important;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .completion-feedback-form {
+    width: 100%;
+  }
+
+  .completion-feedback-fields {
+    grid-template-columns: 1fr;
+  }
+}

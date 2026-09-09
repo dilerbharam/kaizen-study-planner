@@ -45,6 +45,10 @@ const {
   evaluateRescheduleEligibility,
 } = require("./services/rescheduleEligibilityService");
 
+const {
+  validateCompletionFeedback,
+} = require("./services/completionFeedbackService");
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -1520,6 +1524,9 @@ app.get(
 
 /*
  * Updates a pending task's status.
+ *
+ * Completing a task records observed study time and perceived
+ * difficulty for later Kaizen evaluation and adaptation.
  */
 app.patch(
   "/api/tasks/:taskId/status",
@@ -1527,7 +1534,11 @@ app.patch(
   async (req, res) => {
     try {
       const { taskId } = req.params;
-      const { status } = req.body;
+      const {
+        status,
+        actualMinutes,
+        difficultyRating,
+      } = req.body;
 
       const allowedStatuses = [
         "completed",
@@ -1563,18 +1574,62 @@ app.patch(
         });
       }
 
-      const updatedTaskResult =
-        await pool.query(
-          `UPDATE tasks
-           SET status = $1
-           WHERE id = $2
-           RETURNING *`,
-          [status, taskId]
-        );
+      let completionFeedback = null;
+
+      if (status === "completed") {
+        completionFeedback =
+          validateCompletionFeedback({
+            actualMinutes,
+            difficultyRating,
+          });
+
+        if (!completionFeedback.valid) {
+          return res.status(400).json({
+            error:
+              completionFeedback.error,
+          });
+        }
+      }
+
+      let updatedTaskResult;
+
+      if (status === "completed") {
+        updatedTaskResult =
+          await pool.query(
+            `UPDATE tasks
+             SET
+               status = 'completed',
+               actual_minutes = $1,
+               difficulty_rating = $2,
+               completed_at = CURRENT_TIMESTAMP
+             WHERE id = $3
+             RETURNING *`,
+            [
+              completionFeedback.actualMinutes,
+              completionFeedback.difficultyRating,
+              taskId,
+            ]
+          );
+      } else {
+        updatedTaskResult =
+          await pool.query(
+            `UPDATE tasks
+             SET
+               status = 'skipped',
+               actual_minutes = NULL,
+               difficulty_rating = NULL,
+               completed_at = NULL
+             WHERE id = $1
+             RETURNING *`,
+            [taskId]
+          );
+      }
 
       return res.json({
         message:
-          "Task status updated successfully",
+          status === "completed"
+            ? "Task completed and learning feedback saved."
+            : "Task skipped successfully.",
         task: updatedTaskResult.rows[0],
       });
     } catch (error) {
