@@ -1158,3 +1158,161 @@ p {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Feature 4: learning analytics */
+
+.analytics-dashboard {
+  display: grid;
+  gap: 18px;
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.analytics-stat {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.analytics-stat span {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.analytics-stat strong {
+  color: var(--text);
+  font-size: 1.35rem;
+}
+
+.analytics-stat small {
+  color: var(--text-muted);
+}
+
+.analytics-comparison {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.analytics-comparison > div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.analytics-comparison span {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.analytics-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.analytics-counts span {
+  padding: 7px 10px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.78rem;
+}
+
+.kaizen-insight {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+}
+
+.kaizen-insight > span {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kaizen-insight p {
+  margin: 0;
+}
+
+.kaizen-insight-aligned {
+  background: #f0fdf4;
+}
+
+.kaizen-insight-increase-support {
+  background: #fff7ed;
+}
+
+.kaizen-insight-reduce-estimate {
+  background: #eff6ff;
+}
+
+.kaizen-insight-insufficient-data {
+  background: var(--surface-muted);
+}
+
+.topic-analytics {
+  display: grid;
+  gap: 10px;
+}
+
+.topic-analytics-list {
+  display: grid;
+  gap: 8px;
+}
+
+.topic-analytics-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.topic-analytics-row > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.topic-analytics-row span {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+@media (max-width: 900px) {
+  .analytics-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .analytics-grid,
+  .analytics-comparison {
+    grid-template-columns: 1fr;
+  }
+
+  .topic-analytics-row {
+    flex-direction: column;
+  }
+}

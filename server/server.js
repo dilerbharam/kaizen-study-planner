@@ -49,6 +49,10 @@ const {
   validateCompletionFeedback,
 } = require("./services/completionFeedbackService");
 
+const {
+  calculateGoalAnalytics,
+} = require("./services/analyticsService");
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -1517,6 +1521,80 @@ app.get(
       return res.status(500).json({
         error:
           "Failed to calculate goal progress.",
+      });
+    }
+  }
+);
+
+/*
+ * Returns learning analytics for a goal owned by the
+ * authenticated user.
+ *
+ * Historical skipped records remain visible as process evidence,
+ * while completion rate excludes skipped history to avoid counting
+ * replaced work twice.
+ */
+app.get(
+  "/api/goals/:goalId/analytics",
+  authenticate,
+  async (req, res) => {
+    try {
+      const { goalId } = req.params;
+
+      const goal =
+        await findOwnedGoal(
+          pool,
+          goalId,
+          req.user.id
+        );
+
+      if (!goal) {
+        return res.status(404).json({
+          error: "Goal not found.",
+        });
+      }
+
+      const tasksResult =
+        await pool.query(
+          `SELECT
+             tasks.*,
+             topics.title AS topic_title
+           FROM tasks
+           JOIN topics
+             ON tasks.topic_id = topics.id
+           JOIN milestones
+             ON topics.milestone_id =
+                milestones.id
+           WHERE milestones.goal_id = $1
+           ORDER BY
+             tasks.scheduled_date,
+             tasks.id`,
+          [goalId]
+        );
+
+      const analytics =
+        calculateGoalAnalytics(
+          tasksResult.rows
+        );
+
+      return res.json({
+        goal: {
+          id: goal.id,
+          title: goal.title,
+          target_date:
+            goal.target_date,
+        },
+        analytics,
+      });
+    } catch (error) {
+      console.error(
+        "Failed to calculate goal analytics:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Failed to calculate goal analytics.",
       });
     }
   }

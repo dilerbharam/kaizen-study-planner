@@ -6,6 +6,7 @@ import GoalSetupForm from "./components/GoalSetupForm";
 import ProgressDashboard from "./components/ProgressDashboard";
 import TaskCompletionForm from "./components/TaskCompletionForm";
 import AvailabilityManager from "./components/AvailabilityManager";
+import LearningAnalytics from "./components/LearningAnalytics";
 
 const getErrorMessage = (error, fallback) =>
   error.response?.data?.error || fallback;
@@ -696,6 +697,12 @@ function App() {
               progressData={progressData}
               loading={isProgressLoading}
               error={progressError}
+            />
+          )}
+          {selectedGoalId && (
+            <LearningAnalytics
+              goalId={selectedGoalId}
+              tasks={tasks}
             />
           )}
           {selectedGoalId && goalDetails && (
