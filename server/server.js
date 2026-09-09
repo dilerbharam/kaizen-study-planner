@@ -53,6 +53,10 @@ const {
   calculateGoalAnalytics,
 } = require("./services/analyticsService");
 
+const {
+  calculateAdaptiveEstimate,
+} = require("./services/adaptiveEstimationService");
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -1596,6 +1600,474 @@ app.get(
         error:
           "Failed to calculate goal analytics.",
       });
+    }
+  }
+);
+
+/*
+ * Previews a conservative estimate calibration from completion
+ * feedback recorded since the last approved adaptation.
+ */
+app.get(
+  "/api/goals/:goalId/adaptive-estimate",
+  authenticate,
+  async (req, res) => {
+    try {
+      const { goalId } = req.params;
+
+      const goal =
+        await findOwnedGoal(
+          pool,
+          goalId,
+          req.user.id
+        );
+
+      if (!goal) {
+        return res.status(404).json({
+          error: "Goal not found.",
+        });
+      }
+
+      const topicsResult =
+        await pool.query(
+          `SELECT topics.*
+           FROM topics
+           JOIN milestones
+             ON topics.milestone_id =
+                milestones.id
+           WHERE milestones.goal_id = $1
+           ORDER BY
+             milestones.sequence_order,
+             topics.sequence_order`,
+          [goalId]
+        );
+
+      const tasksResult =
+        await pool.query(
+          `SELECT tasks.*
+           FROM tasks
+           JOIN topics
+             ON tasks.topic_id = topics.id
+           JOIN milestones
+             ON topics.milestone_id =
+                milestones.id
+           WHERE milestones.goal_id = $1
+           ORDER BY
+             tasks.scheduled_date,
+             tasks.id`,
+          [goalId]
+        );
+
+      const availabilityResult =
+        await pool.query(
+          `SELECT *
+           FROM availability
+           WHERE goal_id = $1
+           ORDER BY id`,
+          [goalId]
+        );
+
+      const availabilityValidation =
+        validateAvailability(
+          availabilityResult.rows
+        );
+
+      if (
+        !availabilityValidation.valid
+      ) {
+        return res.status(400).json({
+          error:
+            availabilityValidation.error,
+        });
+      }
+
+      const recommendation =
+        calculateAdaptiveEstimate({
+          topics: topicsResult.rows,
+          tasks: tasksResult.rows,
+          availability:
+            availabilityResult.rows,
+          targetDate: goal.target_date,
+          currentMultiplier:
+            goal.estimation_multiplier,
+          lastAdaptationAt:
+            goal.adaptation_updated_at,
+        });
+
+      if (!recommendation.valid) {
+        return res.status(400).json({
+          error: recommendation.error,
+        });
+      }
+
+      return res.json({
+        goal: {
+          id: goal.id,
+          title: goal.title,
+          estimation_multiplier:
+            goal.estimation_multiplier,
+          adaptation_updated_at:
+            goal.adaptation_updated_at,
+          adaptation_feedback_count:
+            goal.adaptation_feedback_count,
+        },
+        recommendation,
+      });
+    } catch (error) {
+      console.error(
+        "Failed to calculate adaptive estimate:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Failed to calculate adaptive estimate.",
+      });
+    }
+  }
+);
+
+/*
+ * Applies a learner-approved estimate calibration and rebalances
+ * ordinary unfinished work in one transaction.
+ *
+ * Completed/skipped history remains immutable and pending
+ * replacement tasks retain their reschedule lineage.
+ */
+app.post(
+  "/api/goals/:goalId/adaptive-estimate/apply",
+  authenticate,
+  async (req, res) => {
+    const client =
+      await pool.connect();
+
+    let transactionStarted =
+      false;
+
+    try {
+      const { goalId } = req.params;
+
+      const goal =
+        await findOwnedGoal(
+          client,
+          goalId,
+          req.user.id
+        );
+
+      if (!goal) {
+        return res.status(404).json({
+          error: "Goal not found.",
+        });
+      }
+
+      const topicsResult =
+        await client.query(
+          `SELECT topics.*
+           FROM topics
+           JOIN milestones
+             ON topics.milestone_id =
+                milestones.id
+           WHERE milestones.goal_id = $1
+           ORDER BY
+             milestones.sequence_order,
+             topics.sequence_order`,
+          [goalId]
+        );
+
+      const tasksResult =
+        await client.query(
+          `SELECT tasks.*
+           FROM tasks
+           JOIN topics
+             ON tasks.topic_id = topics.id
+           JOIN milestones
+             ON topics.milestone_id =
+                milestones.id
+           WHERE milestones.goal_id = $1
+           ORDER BY
+             tasks.scheduled_date,
+             tasks.id`,
+          [goalId]
+        );
+
+      const availabilityResult =
+        await client.query(
+          `SELECT *
+           FROM availability
+           WHERE goal_id = $1
+           ORDER BY id`,
+          [goalId]
+        );
+
+      const availability =
+        availabilityResult.rows;
+
+      const availabilityValidation =
+        validateAvailability(
+          availability
+        );
+
+      if (
+        !availabilityValidation.valid
+      ) {
+        return res.status(400).json({
+          error:
+            availabilityValidation.error,
+        });
+      }
+
+      const topics =
+        topicsResult.rows;
+
+      const tasks =
+        tasksResult.rows;
+
+      const recommendation =
+        calculateAdaptiveEstimate({
+          topics,
+          tasks,
+          availability,
+          targetDate: goal.target_date,
+          currentMultiplier:
+            goal.estimation_multiplier,
+          lastAdaptationAt:
+            goal.adaptation_updated_at,
+        });
+
+      if (!recommendation.valid) {
+        return res.status(400).json({
+          error: recommendation.error,
+        });
+      }
+
+      if (!recommendation.canApply) {
+        return res.status(400).json({
+          error:
+            recommendation.message,
+          recommendation,
+        });
+      }
+
+      const today =
+        normaliseDate(new Date());
+
+      const targetDate =
+        normaliseDate(
+          goal.target_date
+        );
+
+      if (!today || !targetDate) {
+        return res.status(400).json({
+          error:
+            "The goal contains an invalid target date.",
+        });
+      }
+
+      const protectedWorkloadByDate =
+        new Map();
+
+      for (const task of tasks) {
+        const protectedReplacement =
+          task.status === "pending" &&
+          task.rescheduled_from_task_id !==
+            null &&
+          task.rescheduled_from_task_id !==
+            undefined;
+
+        if (!protectedReplacement) {
+          continue;
+        }
+
+        const taskDate =
+          normaliseDate(
+            task.scheduled_date
+          );
+
+        if (
+          !taskDate ||
+          taskDate < today ||
+          taskDate > targetDate
+        ) {
+          continue;
+        }
+
+        const dateKey =
+          formatDate(taskDate);
+
+        protectedWorkloadByDate.set(
+          dateKey,
+          (
+            protectedWorkloadByDate.get(
+              dateKey
+            ) || 0
+          ) +
+            Number(
+              task.estimated_minutes
+            )
+        );
+      }
+
+      const tasksForRebalance =
+        recommendation
+          .affectedTopics
+          .filter(
+            (topic) =>
+              topic
+                .adjusted_remaining_minutes >
+              0
+          )
+          .map((topic) => ({
+            id: topic.id,
+            topic_id: topic.id,
+            task_text:
+              `Study: ${topic.title}`,
+            estimated_minutes:
+              topic
+                .adjusted_remaining_minutes,
+            status: "pending",
+          }));
+
+      const scheduleResult =
+        rebalanceTasks({
+          tasks: tasksForRebalance,
+          availability,
+          workloadByDate:
+            protectedWorkloadByDate,
+          startDate: today,
+          targetDate,
+        });
+
+      if (!scheduleResult.complete) {
+        return res.status(422).json({
+          error:
+            "The adapted schedule could not be generated within the available capacity.",
+          remaining_minutes:
+            scheduleResult.remainingMinutes,
+        });
+      }
+
+      await client.query("BEGIN");
+      transactionStarted = true;
+
+      for (
+        const topic of
+        recommendation.affectedTopics
+      ) {
+        await client.query(
+          `UPDATE topics
+           SET estimated_minutes = $1
+           WHERE id = $2`,
+          [
+            topic.adjusted_total_minutes,
+            topic.id,
+          ]
+        );
+      }
+
+      const deletedPendingResult =
+        await client.query(
+          `DELETE FROM tasks
+           WHERE status = 'pending'
+             AND rescheduled_from_task_id IS NULL
+             AND topic_id IN (
+               SELECT topics.id
+               FROM topics
+               JOIN milestones
+                 ON topics.milestone_id =
+                    milestones.id
+               WHERE milestones.goal_id = $1
+             )
+           RETURNING id`,
+          [goalId]
+        );
+
+      const generatedTasks = [];
+
+      for (
+        const task of scheduleResult.tasks
+      ) {
+        const insertedTask =
+          await client.query(
+            `INSERT INTO tasks
+              (
+                topic_id,
+                scheduled_date,
+                task_text,
+                estimated_minutes,
+                status,
+                rescheduled_from_task_id
+              )
+             VALUES (
+               $1,
+               $2,
+               $3,
+               $4,
+               $5,
+               NULL
+             )
+             RETURNING *`,
+            [
+              task.topicId,
+              task.scheduledDate,
+              task.taskText,
+              task.estimatedMinutes,
+              task.status,
+            ]
+          );
+
+        generatedTasks.push(
+          insertedTask.rows[0]
+        );
+      }
+
+      await client.query(
+        `UPDATE goals
+         SET
+           estimation_multiplier = $1,
+           adaptation_feedback_count =
+             adaptation_feedback_count + $2,
+           adaptation_updated_at =
+             CURRENT_TIMESTAMP
+         WHERE id = $3`,
+        [
+          recommendation
+            .proposedCumulativeMultiplier,
+          recommendation.feedbackCount,
+          goalId,
+        ]
+      );
+
+      await client.query("COMMIT");
+      transactionStarted = false;
+
+      return res.json({
+        message:
+          "Adaptive estimate approved and unfinished schedule rebalanced.",
+        recommendation,
+        removed_pending_tasks:
+          deletedPendingResult.rowCount,
+        tasks_created:
+          generatedTasks.length,
+        tasks: generatedTasks,
+      });
+    } catch (error) {
+      if (transactionStarted) {
+        await client.query(
+          "ROLLBACK"
+        );
+      }
+
+      console.error(
+        "Failed to apply adaptive estimate:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Failed to apply adaptive estimate.",
+      });
+    } finally {
+      client.release();
     }
   }
 );

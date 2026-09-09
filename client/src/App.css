@@ -1316,3 +1316,139 @@ p {
     flex-direction: column;
   }
 }
+
+
+/* Feature 5: adaptive estimation */
+
+.adaptive-estimation-card {
+  display: grid;
+  gap: 16px;
+}
+
+.adaptive-recommendation {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+}
+
+.adaptive-recommendation p {
+  margin: 0;
+}
+
+.adaptive-recommendation-increase,
+.adaptive-recommendation-capacity-risk {
+  background: #fff7ed;
+}
+
+.adaptive-recommendation-decrease {
+  background: #eff6ff;
+}
+
+.adaptive-recommendation-ready,
+.adaptive-recommendation-aligned,
+.adaptive-recommendation-up-to-date {
+  background: #f0fdf4;
+}
+
+.adaptive-recommendation-needs-feedback,
+.adaptive-recommendation-no-remaining-work {
+  background: var(--surface-muted);
+}
+
+.adaptive-metrics {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.adaptive-metrics article {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.adaptive-metrics span,
+.adaptive-comparison span {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.adaptive-metrics strong {
+  font-size: 1.15rem;
+}
+
+.adaptive-comparison {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.adaptive-comparison > div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.adaptive-topic-preview {
+  display: grid;
+  gap: 8px;
+}
+
+.adaptive-topic-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
+.adaptive-topic-row span {
+  color: var(--text-muted);
+}
+
+.adaptive-approval {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.adaptive-approval p {
+  margin: 4px 0 0;
+  max-width: 650px;
+}
+
+@media (max-width: 900px) {
+  .adaptive-metrics,
+  .adaptive-comparison {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .adaptive-metrics,
+  .adaptive-comparison {
+    grid-template-columns: 1fr;
+  }
+
+  .adaptive-approval,
+  .adaptive-topic-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

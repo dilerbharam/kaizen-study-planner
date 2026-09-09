@@ -7,6 +7,7 @@ import ProgressDashboard from "./components/ProgressDashboard";
 import TaskCompletionForm from "./components/TaskCompletionForm";
 import AvailabilityManager from "./components/AvailabilityManager";
 import LearningAnalytics from "./components/LearningAnalytics";
+import AdaptiveEstimation from "./components/AdaptiveEstimation";
 
 const getErrorMessage = (error, fallback) =>
   error.response?.data?.error || fallback;
@@ -703,6 +704,15 @@ function App() {
             <LearningAnalytics
               goalId={selectedGoalId}
               tasks={tasks}
+            />
+          )}
+          {selectedGoalId && (
+            <AdaptiveEstimation
+              goalId={selectedGoalId}
+              tasks={tasks}
+              onPlannerChanged={
+                refreshGoalData
+              }
             />
           )}
           {selectedGoalId && goalDetails && (
