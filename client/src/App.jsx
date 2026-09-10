@@ -1,11 +1,99 @@
 import { useEffect, useState } from "react";
 import "./App.css";
+import PrivacyNotice from "./components/PrivacyNotice";
 import api from "./services/api";
+import AuthForm from "./components/AuthForm";
 import GoalSetupForm from "./components/GoalSetupForm";
 import ProgressDashboard from "./components/ProgressDashboard";
+import TaskCompletionForm from "./components/TaskCompletionForm";
+import AvailabilityManager from "./components/AvailabilityManager";
+import LearningAnalytics from "./components/LearningAnalytics";
+import AdaptiveEstimation from "./components/AdaptiveEstimation";
+
+const getErrorMessage = (error, fallback) =>
+  error.response?.data?.error || fallback;
+
+/**
+ * Loads the planner data for the currently authenticated user.
+ *
+ * User identity is not supplied by the client. The backend derives
+ * ownership from the authenticated HTTP-only cookie.
+ */
+async function fetchPlannerData() {
+  const goalsResponse = await api.get(
+    "/api/goals"
+  );
+
+  const loadedGoals = goalsResponse.data;
+
+  if (loadedGoals.length === 0) {
+    return {
+      goals: [],
+      initialGoalId: null,
+      goalDetails: null,
+      tasks: [],
+      progressData: null,
+      progressError: "",
+    };
+  }
+
+  const storedGoalId =
+    window.localStorage.getItem("kaizen_selected_goal_id");
+
+  const restoredGoal = loadedGoals.find(
+    (goal) =>
+      String(goal.id) === storedGoalId
+  );
+
+  const initialGoalId =
+    restoredGoal?.id ?? loadedGoals[0].id;
+
+  window.localStorage.setItem(
+    "kaizen_selected_goal_id",
+    String(initialGoalId)
+  );
+
+  const [
+    goalDetailsResponse,
+    tasksResponse,
+    progressResult,
+  ] = await Promise.all([
+    api.get(
+      `/api/goals/${initialGoalId}/details`
+    ),
+    api.get(
+      `/api/goals/${initialGoalId}/tasks`
+    ),
+    api
+      .get(
+        `/api/goals/${initialGoalId}/progress`
+      )
+      .then((response) => ({
+        data: response.data,
+        error: "",
+      }))
+      .catch((error) => ({
+        data: null,
+        error: getErrorMessage(
+          error,
+          "Goal progress could not be calculated."
+        ),
+      })),
+  ]);
+
+  return {
+    goals: loadedGoals,
+    initialGoalId,
+    goalDetails: goalDetailsResponse.data,
+    tasks: tasksResponse.data,
+    progressData: progressResult.data,
+    progressError: progressResult.error,
+  };
+}
 
 function App() {
-  const userId = 1;
+  const [currentUser, setCurrentUser] =
+    useState(null);
 
   const [goals, setGoals] = useState([]);
   const [selectedGoalId, setSelectedGoalId] =
@@ -14,7 +102,6 @@ function App() {
   const [goalDetails, setGoalDetails] =
     useState(null);
   const [tasks, setTasks] = useState([]);
-
   const [progressData, setProgressData] =
     useState(null);
   const [isProgressLoading, setIsProgressLoading] =
@@ -23,7 +110,21 @@ function App() {
     useState("");
 
   const [showSetupForm, setShowSetupForm] =
-    useState(false);
+    useState(
+      () =>
+        window.sessionStorage.getItem(
+          "kaizen_current_view"
+        ) === "create-goal"
+    );
+
+  useEffect(() => {
+    window.sessionStorage.setItem(
+      "kaizen_current_view",
+      showSetupForm
+        ? "create-goal"
+        : "planner"
+    );
+  }, [showSetupForm]);
 
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] =
@@ -33,9 +134,6 @@ function App() {
     useState(true);
   const [isGenerating, setIsGenerating] =
     useState(false);
-
-  const getErrorMessage = (error, fallback) =>
-    error.response?.data?.error || fallback;
 
   const showSuccess = (text) => {
     setMessage(text);
@@ -47,9 +145,43 @@ function App() {
     setMessageType("error");
   };
 
+  const applyPlannerData = (
+    plannerData
+  ) => {
+    setGoals(plannerData.goals);
+    setSelectedGoalId(
+      plannerData.initialGoalId
+    );
+    setGoalDetails(
+      plannerData.goalDetails
+    );
+    setTasks(plannerData.tasks);
+    setProgressData(
+      plannerData.progressData
+    );
+    setProgressError(
+      plannerData.progressError
+    );
+    setShowSetupForm(
+      plannerData.goals.length === 0
+    );
+  };
+
+  const resetPlannerState = () => {
+    setGoals([]);
+    setSelectedGoalId(null);
+    setGoalDetails(null);
+    setTasks([]);
+    setProgressData(null);
+    setProgressError("");
+    setShowSetupForm(false);
+    setMessage("");
+    setMessageType("");
+  };
+
   const fetchGoals = async () => {
     const response = await api.get(
-      `/api/goals/${userId}`
+      "/api/goals"
     );
 
     setGoals(response.data);
@@ -102,7 +234,6 @@ function App() {
 
       setProgressError(errorMessage);
       setProgressData(null);
-
       return null;
     } finally {
       setIsProgressLoading(false);
@@ -125,6 +256,21 @@ function App() {
         fetchProgress(goalId),
       ]);
     } catch (error) {
+      if (
+        error.response?.status === 401
+      ) {
+        window.localStorage.removeItem(
+      "kaizen_selected_goal_id"
+    );
+    window.sessionStorage.removeItem(
+      "kaizen_current_view"
+    );
+
+    setCurrentUser(null);
+    resetPlannerState();
+        return;
+      }
+
       showError(
         getErrorMessage(
           error,
@@ -145,34 +291,6 @@ function App() {
     ]);
   };
 
-  const loadApplication = async () => {
-    setIsLoading(true);
-
-    try {
-      const loadedGoals = await fetchGoals();
-
-      if (loadedGoals.length > 0) {
-        const initialGoalId =
-          loadedGoals[0].id;
-
-        setSelectedGoalId(initialGoalId);
-
-        await loadSelectedGoal(initialGoalId);
-      } else {
-        setShowSetupForm(true);
-      }
-    } catch (error) {
-      showError(
-        getErrorMessage(
-          error,
-          "The application data could not be loaded."
-        )
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleGoalSelection = async (
     event
   ) => {
@@ -181,6 +299,10 @@ function App() {
     );
 
     setSelectedGoalId(goalId);
+    window.localStorage.setItem(
+      "kaizen_selected_goal_id",
+      String(goalId)
+    );
     setMessage("");
     setProgressData(null);
     setProgressError("");
@@ -197,6 +319,10 @@ function App() {
 
       setGoals(updatedGoals);
       setSelectedGoalId(goalId);
+      window.localStorage.setItem(
+        "kaizen_selected_goal_id",
+        String(goalId)
+      );
       setShowSetupForm(false);
 
       await loadSelectedGoal(goalId);
@@ -214,10 +340,65 @@ function App() {
     }
   };
 
+  const handleAuthenticated = async (
+    user
+  ) => {
+    setIsLoading(true);
+    setCurrentUser(user);
+    setMessage("");
+    setMessageType("");
+
+    try {
+      const plannerData =
+        await fetchPlannerData();
+
+      applyPlannerData(plannerData);
+    } catch (error) {
+      if (
+        error.response?.status === 401
+      ) {
+        setCurrentUser(null);
+        resetPlannerState();
+        return;
+      }
+
+      showError(
+        getErrorMessage(
+          error,
+          "Planner data could not be loaded."
+        )
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await api.post("/api/auth/logout");
+    } catch {
+      /*
+       * Local state is still cleared if the server cannot be
+       * reached, so the interface does not continue displaying
+       * private planner data after logout is requested.
+       */
+    }
+
+    setCurrentUser(null);
+    resetPlannerState();
+  };
+
   const generateTasks = async () => {
     if (!selectedGoalId) {
       showError(
         "Select a learning goal first."
+      );
+      return;
+    }
+
+    if (progressData?.deadlinePassed) {
+      showError(
+        "Tasks cannot be generated because the goal deadline has passed."
       );
       return;
     }
@@ -247,19 +428,24 @@ function App() {
 
   const updateTaskStatus = async (
     taskId,
-    status
+    status,
+    completionFeedback = null
   ) => {
     setMessage("");
 
     try {
       const response = await api.patch(
         `/api/tasks/${taskId}/status`,
-        { status }
+        {
+          status,
+          ...(completionFeedback || {}),
+        }
       );
 
       showSuccess(response.data.message);
-
       await refreshGoalData();
+
+      return true;
     } catch (error) {
       showError(
         getErrorMessage(
@@ -267,6 +453,8 @@ function App() {
           "The task status could not be updated."
         )
       );
+
+      return false;
     }
   };
 
@@ -292,15 +480,102 @@ function App() {
   };
 
   useEffect(() => {
-    loadApplication();
+    let cancelled = false;
+
+    const initialiseApplication = async () => {
+      try {
+        const authResponse =
+          await api.get("/api/auth/me");
+
+        if (cancelled) {
+          return;
+        }
+
+        const user =
+          authResponse.data.user;
+
+        const plannerData =
+          await fetchPlannerData();
+
+        if (cancelled) {
+          return;
+        }
+
+        setCurrentUser(user);
+        setGoals(plannerData.goals);
+        setSelectedGoalId(
+          plannerData.initialGoalId
+        );
+        setGoalDetails(
+          plannerData.goalDetails
+        );
+        setTasks(plannerData.tasks);
+        setProgressData(
+          plannerData.progressData
+        );
+        setProgressError(
+          plannerData.progressError
+        );
+        setShowSetupForm(
+          plannerData.goals.length === 0
+        );
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        if (
+          error.response?.status === 401
+        ) {
+          setCurrentUser(null);
+          setGoals([]);
+          setSelectedGoalId(null);
+          setGoalDetails(null);
+          setTasks([]);
+          setProgressData(null);
+          setProgressError("");
+          setShowSetupForm(false);
+          setMessage("");
+          setMessageType("");
+        } else {
+          setMessage(
+            getErrorMessage(
+              error,
+              "The application data could not be loaded."
+            )
+          );
+          setMessageType("error");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    initialiseApplication();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (isLoading) {
     return (
       <main className="app-container">
-        <h1>Kaizen Study Planner</h1>
+        <h1>KaizenAI</h1>
         <p>Loading planner data...</p>
       </main>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <AuthForm
+        onAuthenticated={
+          handleAuthenticated
+        }
+      />
     );
   }
 
@@ -308,31 +583,53 @@ function App() {
     <main className="app-container">
       <header className="main-header">
         <div>
-          <h1>Kaizen Study Planner</h1>
+          <h1>KaizenAI</h1>
 
           <p className="subtitle">
-            Adaptive micro-task planner for
-            structured learning
+            Adaptive study planning through
+            continuous improvement
+          </p>
+
+          <p>
+            Signed in as{" "}
+            <strong>
+              {currentUser.name}
+            </strong>
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() =>
-            setShowSetupForm(
-              (current) => !current
-            )
-          }
-        >
-          {showSetupForm
-            ? "Return to Planner"
-            : "Create New Goal"}
-        </button>
+        <div className="task-actions">
+          <button
+            type="button"
+            onClick={() =>
+              setShowSetupForm(
+                (current) => !current
+              )
+            }
+          >
+            {showSetupForm
+              ? "Return to Planner"
+              : "Create New Goal"}
+          </button>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={handleLogout}
+          >
+            Log Out
+          </button>
+        </div>
       </header>
 
       {message && (
         <p
           className={`message ${messageType}`}
+          role={
+            messageType === "error"
+              ? "alert"
+              : "status"
+          }
         >
           {message}
         </p>
@@ -340,7 +637,6 @@ function App() {
 
       {showSetupForm ? (
         <GoalSetupForm
-          userId={userId}
           onGoalCreated={
             handleGoalCreated
           }
@@ -353,30 +649,43 @@ function App() {
         />
       ) : (
         <>
-          <section className="card goal-selector-card">
-            <label>
-              Selected learning goal
+          {goals.length > 0 ? (
+            <section className="card goal-selector-card">
+              <label>
+                Selected learning goal
 
-              <select
-                value={
-                  selectedGoalId || ""
-                }
-                onChange={
-                  handleGoalSelection
-                }
-              >
-                {goals.map((goal) => (
-                  <option
-                    key={goal.id}
-                    value={goal.id}
-                  >
-                    {goal.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </section>
+                <select
+                  value={
+                    selectedGoalId || ""
+                  }
+                  onChange={
+                    handleGoalSelection
+                  }
+                >
+                  {goals.map((goal) => (
+                    <option
+                      key={goal.id}
+                      value={goal.id}
+                    >
+                      {goal.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </section>
+          ) : (
+            <section className="card">
+              <h2>No learning plans yet</h2>
+              <p>
+                Create your first learning
+                plan to start scheduling
+                micro-tasks.
+              </p>
+            </section>
+          )}
 
+          <div className="planner-dashboard-grid">
+            <div className="planner-main-column">
           {goalDetails && (
             <section className="card">
               <h2>
@@ -430,129 +739,205 @@ function App() {
             </section>
           )}
 
-          <ProgressDashboard
-            progressData={progressData}
-            loading={isProgressLoading}
-            error={progressError}
-          />
+          {selectedGoalId && (
+            <ProgressDashboard
+              progressData={progressData}
+              loading={isProgressLoading}
+              error={progressError}
+            />
+          )}
 
-          <section className="card">
-            <div className="section-header">
-              <h2>
-                Generated Daily Tasks
-              </h2>
 
-              <button
-                type="button"
-                onClick={generateTasks}
-                disabled={
-                  isGenerating ||
-                  !selectedGoalId
-                }
-              >
-                {isGenerating
-                  ? "Generating..."
-                  : tasks.length === 0
-                    ? "Generate Tasks"
-                    : "Regenerate Tasks"}
-              </button>
-            </div>
+          </div>
 
-            {tasks.length === 0 ? (
-              <p>
-                No tasks have been
-                generated for this goal.
-              </p>
-            ) : (
-              <div className="task-list">
-                {tasks.map((task) => (
-                  <article
-                    className={`task-card ${task.status}`}
-                    key={task.id}
-                  >
-                    <div>
-                      <h3>
-                        {task.task_text}
-                      </h3>
+            <aside
+              className="planner-side-column"
+              aria-label="Planning insights and controls"
+            >
+          {selectedGoalId && (
+            <LearningAnalytics
+              goalId={selectedGoalId}
+              tasks={tasks}
+            />
+          )}
 
-                      <p>
-                        {new Date(
-                          task.scheduled_date
-                        ).toLocaleDateString()}{" "}
-                        ·{" "}
-                        {
-                          task.estimated_minutes
-                        }{" "}
-                        minutes
-                      </p>
 
-                      <span className="status">
-                        {task.status}
-                      </span>
-                    </div>
+            </aside>
+          </div>
 
-                    <div className="task-actions">
-                      {task.status ===
-                        "pending" && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              updateTaskStatus(
-                                task.id,
-                                "completed"
-                              )
-                            }
-                          >
-                            Complete
-                          </button>
+                    {selectedGoalId && (
+            <section className="card tasks-panel">
+              <div className="section-header">
+                <h2>
+                  Generated Daily Tasks
+                </h2>
 
-                          <button
-                            type="button"
-                            onClick={() =>
-                              updateTaskStatus(
-                                task.id,
-                                "skipped"
-                              )
-                            }
-                          >
-                            Skip
-                          </button>
-                        </>
-                      )}
-
-                      {task.status ===
-                        "skipped" &&
-                        task.can_reschedule && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              rescheduleTask(
-                                task.id
-                              )
-                            }
-                          >
-                            Reschedule
-                          </button>
-                        )}
-
-                      {task.status ===
-                        "skipped" &&
-                        !task.can_reschedule && (
-                          <span className="rescheduled-label">
-                            {task.rescheduled_at
-                              ? "Replacement created"
-                              : "Covered by current schedule"}
-                          </span>
-                        )}
-                    </div>
-                  </article>
-                ))}
+                <button
+                  type="button"
+                  onClick={generateTasks}
+                  disabled={
+                    isGenerating ||
+                    progressData?.deadlinePassed === true
+                  }
+                >
+                  {progressData?.deadlinePassed
+                    ? "Deadline passed"
+                    : isGenerating
+                      ? "Generating..."
+                      : tasks.length === 0
+                        ? "Generate Tasks"
+                        : "Regenerate Tasks"}
+                </button>
               </div>
-            )}
-          </section>
+
+              {tasks.length === 0 ? (
+                <p>
+                  No tasks have been
+                  generated for this goal.
+                </p>
+              ) : (
+                <div className="task-list">
+                  {tasks.map((task) => (
+                    <article
+                      className={`task-card ${task.status}`}
+                      key={task.id}
+                    >
+                      <div>
+                        <h3>
+                          {task.task_text}
+                        </h3>
+
+                        <p>
+                          {new Date(
+                            task.scheduled_date
+                          ).toLocaleDateString()}{" "}
+                          ·{" "}
+                          {
+                            task.estimated_minutes
+                          }{" "}
+                          minutes
+                        </p>
+                        {task.status ===
+                          "completed" &&
+                          task.actual_minutes && (
+                            <p className="task-feedback-summary">
+                              Actual:{" "}
+                              {
+                                task.actual_minutes
+                              }{" "}
+                              min · Difficulty:{" "}
+                              {
+                                task.difficulty_rating
+                              }
+                              /5
+                            </p>
+                          )}
+
+
+                        <span className="status">
+                          {task.status}
+                        </span>
+                      </div>
+
+                      <div className="task-actions">
+                        {task.status ===
+                          "pending" && (
+                          <>
+                            <TaskCompletionForm
+                              task={task}
+                              onComplete={(
+                                feedback
+                              ) =>
+                                updateTaskStatus(
+                                  task.id,
+                                  "completed",
+                                  feedback
+                                )
+                              }
+                            />
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateTaskStatus(
+                                  task.id,
+                                  "skipped"
+                                )
+                              }
+                            >
+                              Skip
+                            </button>
+                          </>
+                        )}
+
+                        {task.status ===
+                          "skipped" &&
+                          task.can_reschedule && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                rescheduleTask(
+                                  task.id
+                                )
+                              }
+                            >
+                              Reschedule
+                            </button>
+                          )}
+
+                        {task.status ===
+                          "skipped" &&
+                          !task.can_reschedule && (
+                            <span className="rescheduled-label">
+                              {task.reschedule_status ||
+                                (task.rescheduled_at
+                                  ? "Replacement created"
+                                  : "Covered by current schedule")}
+                            </span>
+                          )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+<div className="dashboard-wide-panel dashboard-estimation-panel">
+{selectedGoalId && (
+            <AdaptiveEstimation
+              goalId={selectedGoalId}
+              tasks={tasks}
+              onPlannerChanged={
+                refreshGoalData
+              }
+            />
+          )}
+          </div>
+
+<div className="dashboard-wide-panel dashboard-availability-panel">
+{selectedGoalId && goalDetails && (
+            <AvailabilityManager
+              goalId={selectedGoalId}
+              targetDate={
+                goalDetails.goal.target_date
+              }
+              progressData={progressData}
+              onPlannerChanged={
+                refreshGoalData
+              }
+            />
+          )}
+
+          </div>
+
+
+
+
+
         </>
       )}
+          <PrivacyNotice />
     </main>
   );
 }

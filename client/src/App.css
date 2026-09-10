@@ -1,303 +1,674 @@
-body {
-  margin: 0;
-  font-family: Arial, sans-serif;
-  background: #f4f6f8;
-  color: #222;
+:root {
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  color: #172033;
+  background: #f4f7fb;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+
+  --background: #f4f7fb;
+  --surface: #ffffff;
+  --surface-soft: #f8fafc;
+  --surface-muted: #eef2f7;
+
+  --text: #172033;
+  --text-muted: #667085;
+  --text-light: #8a94a6;
+
+  --border: #dde3ec;
+  --border-strong: #cfd7e3;
+
+  --primary: #4f46e5;
+  --primary-dark: #3730a3;
+  --primary-soft: #eef2ff;
+
+  --success: #15803d;
+  --success-soft: #ecfdf3;
+
+  --warning: #b45309;
+  --warning-soft: #fff7ed;
+
+  --danger: #dc2626;
+  --danger-soft: #fff1f2;
+
+  --shadow-sm:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 2px 8px rgba(15, 23, 42, 0.04);
+
+  --shadow-md:
+    0 4px 10px rgba(15, 23, 42, 0.05),
+    0 16px 32px rgba(15, 23, 42, 0.06);
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
 }
 
-.app-container {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 32px;
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: var(--background);
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  color: var(--text);
+  background:
+    radial-gradient(
+      circle at 15% 0%,
+      rgba(79, 70, 229, 0.08),
+      transparent 28rem
+    ),
+    radial-gradient(
+      circle at 90% 10%,
+      rgba(14, 165, 233, 0.07),
+      transparent 24rem
+    ),
+    var(--background);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  min-height: 40px;
+  padding: 9px 16px;
+  color: #ffffff;
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.2;
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+button:hover:not(:disabled) {
+  background: var(--primary-dark);
+  border-color: var(--primary-dark);
+  box-shadow: 0 7px 18px rgba(79, 70, 229, 0.2);
+  transform: translateY(-1px);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid rgba(79, 70, 229, 0.24);
+  outline-offset: 2px;
+}
+
+input,
+select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  color: var(--text);
+  background: #ffffff;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+input:hover:not(:disabled),
+select:hover:not(:disabled) {
+  border-color: #aeb9ca;
+}
+
+input:focus,
+select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+  outline: none;
+}
+
+input:disabled,
+select:disabled {
+  color: var(--text-light);
+  background: #f1f4f8;
+  cursor: not-allowed;
+}
+
+label {
+  display: grid;
+  gap: 7px;
+  color: #344054;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  overflow-wrap: anywhere;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: var(--text);
+  line-height: 1.2;
 }
 
 h1 {
-  margin-bottom: 12px;
-  font-size: 42px;
-  line-height: 1.1;
+  margin: 0;
+  font-size: clamp(1.9rem, 4vw, 2.75rem);
+  letter-spacing: -0.045em;
+}
+
+h2 {
+  margin: 0 0 18px;
+  font-size: 1.35rem;
+  letter-spacing: -0.025em;
+}
+
+h3 {
+  margin: 24px 0 12px;
+  font-size: 1.03rem;
+}
+
+h4 {
+  margin: 0;
+  font-size: 0.96rem;
+}
+
+p {
+  line-height: 1.6;
+}
+
+.app-container {
+  width: min(1080px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 34px 0 72px;
+}
+
+.main-header {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 28px;
+  min-height: 164px;
+  margin-bottom: 24px;
+  padding: 34px 38px;
+  overflow: hidden;
+  color: #ffffff;
+  background:
+    linear-gradient(
+      135deg,
+      #312e81 0%,
+      #4f46e5 52%,
+      #2563eb 100%
+    );
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 24px 50px rgba(49, 46, 129, 0.2),
+    inset 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.main-header::before,
+.main-header::after {
+  position: absolute;
+  content: "";
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.main-header::before {
+  width: 220px;
+  height: 220px;
+  top: -120px;
+  right: 80px;
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.main-header::after {
+  width: 150px;
+  height: 150px;
+  right: -50px;
+  bottom: -76px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.main-header > * {
+  position: relative;
+  z-index: 1;
+}
+
+.main-header h1 {
+  color: #ffffff;
 }
 
 .subtitle {
-  color: #666;
+  max-width: 580px;
+  margin: 10px 0 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 1rem;
+}
+
+.main-header button {
+  flex: 0 0 auto;
+  color: #312e81;
+  background: #ffffff;
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.14);
+}
+
+.main-header button:hover:not(:disabled) {
+  color: #312e81;
+  background: #f8fafc;
+  border-color: #ffffff;
+}
+
+.card,
+.progress-dashboard {
+  margin-bottom: 22px;
+  padding: 26px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(207, 215, 227, 0.82);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.card > :first-child,
+.progress-dashboard > :first-child {
   margin-top: 0;
-  margin-bottom: 32px;
-  font-size: 18px;
 }
 
-.subtitle {
-  color: #666;
-  margin-bottom: 24px;
+.card > :last-child,
+.progress-dashboard > :last-child {
+  margin-bottom: 0;
 }
 
-.card {
-  background: white;
-  padding: 24px;
-  border-radius: 12px;
-  margin-bottom: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+.goal-selector-card {
+  padding: 20px 24px;
+}
+
+.goal-selector-card label {
+  grid-template-columns: minmax(160px, 230px) 1fr;
+  align-items: center;
+}
+
+.goal-selector-card select {
+  min-height: 46px;
+  font-weight: 650;
+  background-color: #ffffff;
+}
+
+.goal-selector-card + .card > p {
+  margin: 8px 0;
+  color: var(--text-muted);
+}
+
+.goal-selector-card + .card > ol,
+.goal-selector-card + .card > ul {
+  display: grid;
+  grid-template-columns:
+    repeat(auto-fit, minmax(220px, 1fr));
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.goal-selector-card + .card > ol {
+  counter-reset: milestone;
+}
+
+.goal-selector-card + .card > ol li,
+.goal-selector-card + .card > ul li {
+  position: relative;
+  min-height: 46px;
+  padding: 12px 14px;
+  color: #344054;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  line-height: 1.45;
+}
+
+.goal-selector-card + .card > ol li {
+  padding-left: 42px;
+  counter-increment: milestone;
+}
+
+.goal-selector-card + .card > ol li::before {
+  position: absolute;
+  display: grid;
+  width: 23px;
+  height: 23px;
+  left: 11px;
+  place-items: center;
+  color: #ffffff;
+  font-size: 0.73rem;
+  font-weight: 800;
+  background: var(--primary);
+  border-radius: 999px;
+  content: counter(milestone);
+}
+
+.message {
+  margin: 0 0 22px;
+  padding: 14px 17px;
+  font-size: 0.92rem;
+  font-weight: 650;
+  border: 1px solid;
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+}
+
+.message.success {
+  color: #166534;
+  background: var(--success-soft);
+  border-color: #bbf7d0;
+}
+
+.message.error {
+  color: #991b1b;
+  background: var(--danger-soft);
+  border-color: #fecdd3;
 }
 
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 22px;
+  margin-bottom: 20px;
 }
 
-button {
-  border: none;
-  background: #222;
-  color: white;
-  padding: 8px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  margin-left: 8px;
+.section-header h2,
+.section-header h3,
+.section-header h4,
+.section-header p {
+  margin-top: 0;
 }
 
-button:hover {
-  opacity: 0.85;
+.section-header h2,
+.section-header h3 {
+  margin-bottom: 4px;
+}
+
+.section-header p {
+  margin-bottom: 0;
+  color: var(--text-muted);
 }
 
 .task-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 12px;
 }
 
 .task-card {
+  --task-color: var(--primary);
+  --task-background: #f8faff;
+  position: relative;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-left: 6px solid #999;
-  background: #fafafa;
-  padding: 16px;
-  border-radius: 8px;
+  gap: 24px;
+  min-height: 102px;
+  padding: 18px 18px 18px 22px;
+  overflow: hidden;
+  background: var(--task-background);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.task-card::before {
+  position: absolute;
+  width: 5px;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--task-color);
+  content: "";
+}
+
+.task-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.07);
+  transform: translateY(-1px);
+}
+
+.task-card.pending {
+  --task-color: #d97706;
+  --task-background: #fffdf7;
+}
+
+.task-card.completed {
+  --task-color: #15803d;
+  --task-background: #f6fef8;
+}
+
+.task-card.skipped {
+  --task-color: #e11d48;
+  --task-background: #fff8fa;
 }
 
 .task-card h3 {
   margin: 0 0 6px;
+  color: #1f2937;
+  font-size: 0.98rem;
+  font-weight: 750;
 }
 
 .task-card p {
-  margin: 0 0 8px;
-  color: #555;
+  margin: 0 0 9px;
+  color: var(--text-muted);
+  font-size: 0.83rem;
 }
 
 .status {
-  font-size: 13px;
-  font-weight: bold;
+  display: inline-flex;
+  align-items: center;
+  min-height: 25px;
+  padding: 4px 9px;
+  color: var(--task-color);
+  font-size: 0.69rem;
+  font-weight: 800;
+  letter-spacing: 0.055em;
   text-transform: uppercase;
-}
-
-.task-card.completed {
-  border-left-color: green;
-}
-
-.task-card.skipped {
-  border-left-color: red;
-}
-
-.task-card.pending {
-  border-left-color: orange;
-}
-
-.message {
-  background: #eef7ee;
-  padding: 10px;
-  border-radius: 6px;
-}
-.main-header,
-.section-header,
-.editor-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-}
-
-.form-section {
-  margin-top: 2rem;
-}
-
-.setup-card label,
-.goal-selector-card label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  font-weight: 600;
-}
-
-.setup-card input,
-.goal-selector-card select {
-  padding: 0.75rem;
-  border: 1px solid #c7c7c7;
-  border-radius: 8px;
-  font: inherit;
-}
-
-.milestone-editor {
-  margin-top: 1rem;
-  padding: 1rem;
-  border: 1px solid #dddddd;
-  border-radius: 10px;
-  background: #fafafa;
-}
-
-.topic-editor-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-  margin: 1rem 0;
-}
-
-.topic-editor {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 180px auto;
-  align-items: end;
-  gap: 0.75rem;
-}
-
-.availability-grid {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.availability-row {
-  display: grid;
-  grid-template-columns: 1fr 180px;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.8rem;
-  border: 1px solid #dddddd;
-  border-radius: 8px;
-}
-
-.availability-row.selected {
-  border-color: #2f295c;
-}
-
-.checkbox-label {
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: center;
-}
-
-.primary-action {
-  margin-top: 2rem;
-  width: 100%;
-}
-
-.secondary-button {
-  background: #ededed;
-  color: #222222;
-}
-
-.danger-button {
-  background: #8d1b1b;
-}
-
-.message.error {
-  background: #ffe5e5;
-  color: #8d1b1b;
-}
-
-.message.success {
-  background: #e7f7ec;
-  color: #1d6a36;
-}
-
-@media (max-width: 750px) {
-  .main-header,
-  .section-header,
-  .editor-header {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .form-grid,
-  .topic-editor,
-  .availability-row {
-    grid-template-columns: 1fr;
-  }
-}
-.progress-dashboard {
-  margin-bottom: 24px;
-  padding: 24px;
   background: #ffffff;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px
-    rgba(0, 0, 0, 0.08);
+  border: 1px solid color-mix(
+    in srgb,
+    var(--task-color) 28%,
+    transparent
+  );
+  border-radius: 999px;
+}
+
+.task-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.task-actions button {
+  min-height: 36px;
+  padding: 8px 13px;
+  font-size: 0.78rem;
+}
+
+.task-card.pending
+  .task-actions
+  button:first-child {
+  background: #15803d;
+  border-color: #15803d;
+}
+
+.task-card.pending
+  .task-actions
+  button:first-child:hover {
+  background: #166534;
+  border-color: #166534;
+  box-shadow: 0 7px 16px rgba(21, 128, 61, 0.18);
+}
+
+.task-card.pending
+  .task-actions
+  button:last-child:not(:first-child) {
+  background: #ffffff;
+  color: #b42318;
+  border-color: #f1b8b4;
+}
+
+.task-card.pending
+  .task-actions
+  button:last-child:not(:first-child):hover {
+  color: #ffffff;
+  background: #dc2626;
+  border-color: #dc2626;
+  box-shadow: 0 7px 16px rgba(220, 38, 38, 0.18);
+}
+
+.task-card.skipped .task-actions button {
+  background: #4f46e5;
+  border-color: #4f46e5;
+}
+
+.rescheduled-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 7px 11px;
+  color: #475467;
+  font-size: 0.75rem;
+  font-weight: 750;
+  background: #eef2f7;
+  border: 1px solid #d8e0eb;
+  border-radius: 999px;
+}
+
+/* Progress dashboard */
+
+.progress-dashboard {
+  padding: 26px;
 }
 
 .progress-heading {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 16px;
+  gap: 18px;
   margin-bottom: 22px;
 }
 
 .progress-heading h2 {
-  margin: 0 0 4px;
+  margin: 0 0 5px;
 }
 
 .progress-heading p {
   margin: 0;
-  color: #626262;
+  color: var(--text-muted);
 }
 
 .feasibility-badge {
-  display: inline-block;
-  padding: 7px 12px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 31px;
+  padding: 6px 12px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  white-space: nowrap;
+  border: 1px solid transparent;
   border-radius: 999px;
-  font-size: 0.82rem;
-  font-weight: 700;
 }
 
 .feasibility-on-track {
-  color: #176329;
-  background: #dff5e5;
+  color: #166534;
+  background: #dcfce7;
+  border-color: #bbf7d0;
 }
 
 .feasibility-completed {
-  color: #135f2d;
-  background: #d9f7e2;
+  color: #14532d;
+  background: #d1fae5;
+  border-color: #a7f3d0;
 }
 
 .feasibility-at-risk {
-  color: #8a4b00;
-  background: #fff0cc;
+  color: #92400e;
+  background: #ffedd5;
+  border-color: #fed7aa;
 }
 
 .feasibility-deadline-passed {
-  color: #8d1d1d;
-  background: #fde0e0;
+  color: #991b1b;
+  background: #fee2e2;
+  border-color: #fecaca;
 }
 
 .progress-bar-header {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 8px;
+  align-items: center;
+  margin-bottom: 9px;
+  color: #344054;
+  font-size: 0.86rem;
+}
+
+.progress-bar-header strong {
+  font-size: 0.95rem;
 }
 
 .progress-bar-track {
   width: 100%;
-  height: 14px;
+  height: 12px;
   overflow: hidden;
-  background: #e8e8e8;
+  background: #e8ecf2;
   border-radius: 999px;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
 .progress-bar-fill {
   height: 100%;
-  background: #159447;
-  border-radius: 999px;
-  transition: width 0.3s ease;
+  min-width: 0;
+  background:
+    linear-gradient(
+      90deg,
+      #4f46e5,
+      #2563eb
+    );
+  border-radius: inherit;
+  box-shadow: 0 2px 7px rgba(79, 70, 229, 0.24);
+  transition: width 0.35s ease;
 }
 
 .progress-stat-grid {
@@ -309,21 +680,31 @@ button:hover {
 }
 
 .progress-stat-card {
+  min-height: 92px;
   padding: 16px;
-  background: #f6f7f8;
-  border: 1px solid #e4e6e8;
-  border-radius: 9px;
+  background:
+    linear-gradient(
+      145deg,
+      #ffffff,
+      #f7f9fc
+    );
+  border: 1px solid var(--border);
+  border-radius: 11px;
 }
 
 .progress-stat-card span {
   display: block;
-  margin-bottom: 7px;
-  color: #616161;
-  font-size: 0.84rem;
+  margin-bottom: 9px;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 650;
 }
 
 .progress-stat-card strong {
+  display: block;
+  color: #1d2939;
   font-size: 1.15rem;
+  line-height: 1.25;
 }
 
 .task-count-grid {
@@ -331,14 +712,16 @@ button:hover {
   grid-template-columns:
     repeat(3, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
-.task-count-grid div {
-  padding: 14px;
+.task-count-grid > div {
+  min-height: 76px;
+  padding: 13px;
   text-align: center;
-  border: 1px solid #e2e2e2;
-  border-radius: 9px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 11px;
 }
 
 .task-count-grid strong,
@@ -348,69 +731,2605 @@ button:hover {
 
 .task-count-grid strong {
   margin-bottom: 4px;
+  color: var(--text);
   font-size: 1.25rem;
 }
 
 .task-count-grid span {
-  color: #626262;
-  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-size: 0.74rem;
 }
 
 .feasibility-message {
-  margin-top: 18px;
-  padding: 14px 16px;
-  border-left: 5px solid;
-  border-radius: 7px;
+  margin-top: 16px;
+  padding: 15px 17px;
+  border: 1px solid;
+  border-left-width: 4px;
+  border-radius: 10px;
+}
+
+.feasibility-message strong {
+  font-size: 0.86rem;
 }
 
 .feasibility-message p {
-  margin: 5px 0 0;
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 .feasibility-message-on-track,
 .feasibility-message-completed {
-  border-color: #159447;
-  background: #edf9f1;
+  color: #166534;
+  background: var(--success-soft);
+  border-color: #86efac;
 }
 
 .feasibility-message-at-risk {
-  border-color: #d78900;
-  background: #fff8e6;
+  color: #92400e;
+  background: var(--warning-soft);
+  border-color: #fdba74;
 }
 
 .feasibility-message-deadline-passed {
-  border-color: #c62828;
-  background: #fff0f0;
+  color: #991b1b;
+  background: var(--danger-soft);
+  border-color: #fda4af;
 }
 
 .progress-error {
-  padding: 13px;
-  color: #8d1d1d;
-  background: #fff0f0;
-  border-left: 5px solid #c62828;
-  border-radius: 7px;
+  padding: 14px 16px;
+  color: #991b1b;
+  font-weight: 650;
+  background: var(--danger-soft);
+  border: 1px solid #fecaca;
+  border-left: 4px solid var(--danger);
+  border-radius: 10px;
 }
 
-@media (max-width: 760px) {
+/* Goal setup form */
+
+.setup-card {
+  padding: 30px;
+}
+
+.setup-card form {
+  display: grid;
+  gap: 26px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.form-section {
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.form-section > h3 {
+  margin-top: 0;
+  margin-bottom: 8px;
+}
+
+.form-section > p {
+  margin-top: 0;
+  color: var(--text-muted);
+}
+
+.milestone-editor {
+  margin-top: 16px;
+  padding: 20px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.milestone-editor + .milestone-editor {
+  margin-top: 14px;
+}
+
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.topic-editor-list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.topic-editor {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 2fr)
+    minmax(130px, 0.7fr)
+    auto;
+  align-items: end;
+  gap: 12px;
+  padding: 14px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.secondary-button {
+  color: #4338ca;
+  background: var(--primary-soft);
+  border-color: #c7d2fe;
+}
+
+.secondary-button:hover:not(:disabled) {
+  color: #ffffff;
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.danger-button {
+  color: #b42318;
+  background: #ffffff;
+  border-color: #f3b6b2;
+}
+
+.danger-button:hover:not(:disabled) {
+  color: #ffffff;
+  background: var(--danger);
+  border-color: var(--danger);
+  box-shadow: 0 7px 16px rgba(220, 38, 38, 0.16);
+}
+
+.primary-action {
+  justify-self: start;
+  min-width: 220px;
+  min-height: 46px;
+  padding-inline: 22px;
+}
+
+.availability-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.availability-row {
+  display: grid;
+  grid-template-columns: 1fr 130px;
+  align-items: center;
+  gap: 16px;
+  padding: 14px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.availability-row.selected {
+  background: var(--primary-soft);
+  border-color: #a5b4fc;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.06);
+}
+
+.checkbox-label {
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.checkbox-label input {
+  width: 18px;
+  min-height: auto;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+.checkbox-label span {
+  font-weight: 750;
+}
+
+.availability-row label:last-child {
+  font-size: 0.74rem;
+}
+
+/* Responsive layout */
+
+@media (max-width: 840px) {
+  .app-container {
+    width: min(100% - 24px, 1080px);
+    padding-top: 20px;
+  }
+
+  .main-header {
+    min-height: 0;
+    padding: 28px;
+  }
+
   .progress-stat-grid {
     grid-template-columns:
       repeat(2, minmax(0, 1fr));
   }
 
-  .task-count-grid {
+  .topic-editor {
+    grid-template-columns: 1fr 150px;
+  }
+
+  .topic-editor .danger-button {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+
+@media (max-width: 650px) {
+  .app-container {
+    width: min(100% - 18px, 1080px);
+    padding-bottom: 40px;
+  }
+
+  .main-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 20px;
+    padding: 25px 22px;
+    border-radius: 16px;
+  }
+
+  .main-header button {
+    width: 100%;
+  }
+
+  .card,
+  .progress-dashboard,
+  .setup-card {
+    padding: 20px;
+  }
+
+  .goal-selector-card label {
     grid-template-columns: 1fr;
   }
 
-  .progress-heading {
+  .section-header,
+  .progress-heading,
+  .editor-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .section-header > button,
+  .editor-header > button {
+    width: 100%;
+  }
+
+  .task-card {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .task-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .task-actions button {
+    flex: 1 1 120px;
+  }
+
+  .progress-stat-grid,
+  .task-count-grid,
+  .form-grid,
+  .availability-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .topic-editor,
+  .availability-row {
+    grid-template-columns: 1fr;
+  }
+
+  .primary-action {
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .app-container {
+    width: calc(100% - 12px);
+  }
+
+  .main-header,
+  .card,
+  .progress-dashboard,
+  .setup-card {
+    padding: 18px;
+    border-radius: 13px;
+  }
+
+  h1 {
+    font-size: 1.75rem;
+  }
+
+  h2 {
+    font-size: 1.2rem;
+  }
+
+  .task-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .task-actions button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* Feature 3: completion feedback */
+
+.completion-feedback-form {
+  width: min(430px, 70vw);
+  padding: 14px;
+  background: #ffffff;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+}
+
+.completion-feedback-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.completion-feedback-heading span {
+  color: var(--text-muted);
+  font-weight: 650;
+}
+
+.completion-feedback-fields {
+  display: grid;
+  grid-template-columns:
+    minmax(120px, 0.8fr)
+    minmax(170px, 1fr);
+  gap: 10px;
+}
+
+.completion-feedback-fields label {
+  font-size: 0.75rem;
+}
+
+.completion-feedback-fields input,
+.completion-feedback-fields select {
+  min-height: 38px;
+  padding: 7px 9px;
+}
+
+.completion-feedback-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.completion-feedback-error {
+  margin: 10px 0 0;
+  color: #991b1b;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.task-feedback-summary {
+  color: #166534 !important;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .completion-feedback-form {
+    width: 100%;
+  }
+
+  .completion-feedback-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* Feature 4: learning analytics */
+
+.analytics-dashboard {
+  display: grid;
+  gap: 18px;
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.analytics-stat {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.analytics-stat span {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.analytics-stat strong {
+  color: var(--text);
+  font-size: 1.35rem;
+}
+
+.analytics-stat small {
+  color: var(--text-muted);
+}
+
+.analytics-comparison {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.analytics-comparison > div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.analytics-comparison span {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.analytics-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.analytics-counts span {
+  padding: 7px 10px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.78rem;
+}
+
+.kaizen-insight {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+}
+
+.kaizen-insight > span {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kaizen-insight p {
+  margin: 0;
+}
+
+.kaizen-insight-aligned {
+  background: #f0fdf4;
+}
+
+.kaizen-insight-increase-support {
+  background: #fff7ed;
+}
+
+.kaizen-insight-reduce-estimate {
+  background: #eff6ff;
+}
+
+.kaizen-insight-insufficient-data {
+  background: var(--surface-muted);
+}
+
+.topic-analytics {
+  display: grid;
+  gap: 10px;
+}
+
+.topic-analytics-list {
+  display: grid;
+  gap: 8px;
+}
+
+.topic-analytics-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.topic-analytics-row > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.topic-analytics-row span {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+@media (max-width: 900px) {
+  .analytics-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .analytics-grid,
+  .analytics-comparison {
+    grid-template-columns: 1fr;
+  }
+
+  .topic-analytics-row {
     flex-direction: column;
   }
 }
-.rescheduled-label {
-  display: inline-block;
-  padding: 6px 10px;
-  color: #555;
-  background: #e9ecef;
+
+
+/* Feature 5: adaptive estimation */
+
+.adaptive-estimation-card {
+  display: grid;
+  gap: 16px;
+}
+
+.adaptive-recommendation {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+}
+
+.adaptive-recommendation p {
+  margin: 0;
+}
+
+.adaptive-recommendation-increase,
+.adaptive-recommendation-capacity-risk {
+  background: #fff7ed;
+}
+
+.adaptive-recommendation-decrease {
+  background: #eff6ff;
+}
+
+.adaptive-recommendation-ready,
+.adaptive-recommendation-aligned,
+.adaptive-recommendation-up-to-date {
+  background: #f0fdf4;
+}
+
+.adaptive-recommendation-needs-feedback,
+.adaptive-recommendation-no-remaining-work {
+  background: var(--surface-muted);
+}
+
+.adaptive-metrics {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.adaptive-metrics article {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.adaptive-metrics span,
+.adaptive-comparison span {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.adaptive-metrics strong {
+  font-size: 1.15rem;
+}
+
+.adaptive-comparison {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.adaptive-comparison > div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.adaptive-topic-preview {
+  display: grid;
+  gap: 8px;
+}
+
+.adaptive-topic-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
+.adaptive-topic-row span {
+  color: var(--text-muted);
+}
+
+.adaptive-approval {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.adaptive-approval p {
+  margin: 4px 0 0;
+  max-width: 650px;
+}
+
+@media (max-width: 900px) {
+  .adaptive-metrics,
+  .adaptive-comparison {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .adaptive-metrics,
+  .adaptive-comparison {
+    grid-template-columns: 1fr;
+  }
+
+  .adaptive-approval,
+  .adaptive-topic-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+
+/* Feature 6: Gemini-assisted plan creation */
+
+.plan-mode-selector {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0 20px;
+}
+
+.plan-mode-card {
+  display: grid;
+  grid-template-columns:
+    auto 1fr;
+  column-gap: 10px;
+  row-gap: 4px;
+  align-items: start;
+  padding: 14px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.plan-mode-card.selected {
+  border-color: var(--primary);
+  box-shadow:
+    0 0 0 1px var(--primary);
+}
+
+.plan-mode-card input {
+  grid-row: 1 / span 2;
+  margin-top: 3px;
+}
+
+.plan-mode-card strong {
+  color: var(--text);
+}
+
+.plan-mode-card span {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.setup-card textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+}
+
+.optional-label {
+  margin-left: 6px;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.ai-planning-intro,
+.ai-generation-panel,
+.ai-review-banner,
+.ai-assumptions,
+.ai-privacy-note {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.ai-planning-intro {
+  margin-bottom: 16px;
+  background: #eff6ff;
+}
+
+.ai-privacy-note {
+  margin: 16px 0;
+  background: #fff7ed;
+}
+
+.ai-planning-intro p,
+.ai-privacy-note p,
+.ai-generation-panel p,
+.ai-review-banner p {
+  margin: 4px 0 0;
+}
+
+.ai-generation-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 16px 0;
+  background: var(--surface-muted);
+}
+
+.ai-generation-panel > div {
+  max-width: 660px;
+}
+
+.ai-review-banner {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 16px 0;
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.ai-review-banner.stale {
+  background: #fff7ed;
+  border-color: #fdba74;
+}
+
+.ai-draft-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+  align-content: flex-start;
+}
+
+.ai-draft-meta span {
+  padding: 5px 8px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.ai-assumptions {
+  margin-bottom: 16px;
+  background: var(--surface-muted);
+}
+
+.ai-assumptions ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.ai-assumptions li {
+  margin: 4px 0;
+  color: var(--text-muted);
+}
+
+.ai-milestone-rationale {
+  margin: 6px 0 10px;
+  padding: 8px 10px;
+  background: #eff6ff;
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+@media (max-width: 720px) {
+  .plan-mode-selector {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-generation-panel,
+  .ai-review-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ai-draft-meta {
+    justify-content: flex-start;
+  }
+}
+
+
+/* Feature 6 UI polish: KaizenAI blue workspace */
+
+:root {
+  --background: #f2f6fb;
+  --surface: #ffffff;
+  --surface-soft: #f7faff;
+  --surface-muted: #edf4fb;
+
+  --text: #152235;
+  --text-muted: #607086;
+  --text-light: #8492a6;
+
+  --border: #d8e3ef;
+  --border-strong: #c6d5e5;
+
+  --primary: #0b63ce;
+  --primary-dark: #084ea5;
+  --primary-soft: #e8f2ff;
+
+  --shadow-sm:
+    0 1px 2px rgba(15, 54, 92, 0.04);
+
+  --shadow-md:
+    0 3px 14px rgba(15, 54, 92, 0.07);
+
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+}
+
+body {
+  background: #f2f6fb;
+}
+
+/*
+ * Use more of a desktop viewport. The previous 1080px shell left
+ * large empty side gutters on common 1440p/desktop displays.
+ */
+.app-container {
+  width: min(1480px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 24px 0 56px;
+}
+
+.auth-container {
+  width: min(980px, calc(100% - 48px));
+}
+
+/*
+ * Flatter, product-style top bar: blue rather than purple,
+ * fewer decorative shapes, tighter vertical footprint.
+ */
+.main-header {
+  min-height: 116px;
+  margin-bottom: 18px;
+  padding: 24px 30px;
+  background:
+    linear-gradient(
+      125deg,
+      #083b73 0%,
+      #0b63ce 62%,
+      #1677d2 100%
+    );
+  border: 1px solid #0a57b5;
+  border-radius: 12px;
+  box-shadow:
+    0 6px 20px rgba(8, 59, 115, 0.13);
+}
+
+.main-header::before,
+.main-header::after {
+  display: none;
+}
+
+.main-header h1 {
+  font-size: clamp(2rem, 3vw, 2.5rem);
+  letter-spacing: -0.04em;
+}
+
+.subtitle {
+  max-width: 720px;
+  margin-top: 7px;
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.main-header p:not(.subtitle) {
+  margin-bottom: 0;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.82rem;
+}
+
+/*
+ * Reduce the generic "floating rounded card" appearance.
+ */
+.card,
+.progress-dashboard {
+  margin-bottom: 18px;
+  padding: 22px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+}
+
+.card:hover,
+.progress-dashboard:hover {
+  border-color: #ccd9e6;
+}
+
+button {
+  border-radius: 7px;
+  box-shadow: none;
+}
+
+button:hover:not(:disabled) {
+  box-shadow:
+    0 3px 10px rgba(11, 99, 206, 0.16);
+  transform: none;
+}
+
+input,
+select,
+textarea {
+  border-radius: 7px;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--primary);
+  box-shadow:
+    0 0 0 3px rgba(11, 99, 206, 0.1);
+  outline: none;
+}
+
+.secondary-button {
+  color: #0959b5;
+  background: #edf5ff;
+  border-color: #bad5f4;
+}
+
+.goal-selector-card {
+  padding: 16px 20px;
+}
+
+.goal-selector-card label {
+  grid-template-columns:
+    minmax(150px, 210px)
+    minmax(0, 1fr);
+}
+
+/*
+ * Desktop workspace layout.
+ * Main learning status uses the larger left column.
+ * Controls/analytics use a persistent right column instead of a
+ * long single stack in the middle of the screen.
+ */
+.planner-dashboard-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1.65fr)
+    minmax(340px, 0.85fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.planner-main-column,
+.planner-side-column {
+  min-width: 0;
+}
+
+.planner-side-column {
+  display: grid;
+  gap: 16px;
+}
+
+.planner-side-column > * {
+  margin-bottom: 0;
+}
+
+.planner-side-column .card,
+.planner-side-column .progress-dashboard {
+  padding: 20px;
+}
+
+.tasks-panel {
+  margin-top: 2px;
+}
+
+/*
+ * Make the goal overview feel like a dashboard rather than a report page.
+ */
+.planner-main-column
+  > .card:first-child {
+  border-top:
+    3px solid var(--primary);
+}
+
+.planner-main-column
+  > .card:first-child
+  > h2 {
+  margin-bottom: 12px;
+}
+
+.progress-dashboard {
+  border-top:
+    3px solid #2e7fd5;
+}
+
+.progress-stat-card,
+.analytics-stat,
+.analytics-comparison > div,
+.task-count-grid > div {
+  background: #f8fbff;
+  border-color: #d9e6f2;
+  border-radius: 8px;
+}
+
+.progress-bar-fill {
+  background:
+    linear-gradient(
+      90deg,
+      #0b63ce,
+      #2d87dc
+    );
+  box-shadow:
+    0 2px 6px rgba(11, 99, 206, 0.18);
+}
+
+/*
+ * KaizenAI creation experience.
+ */
+.plan-mode-selector {
+  gap: 14px;
+}
+
+.plan-mode-card {
+  padding: 16px;
+  background: #f8fbff;
+  border: 1px solid #d3e1ef;
+  border-radius: 9px;
+}
+
+.plan-mode-card.selected {
+  background: #eaf4ff;
+  border-color: #3b84cf;
+  box-shadow:
+    inset 3px 0 0 #0b63ce;
+}
+
+.ai-planning-intro {
+  background: #eef6ff;
+  border-color: #c5dcf5;
+}
+
+.ai-generation-panel {
+  background: #f7faff;
+  border-color: #d5e3f0;
+}
+
+.ai-privacy-note {
+  background: #f8fbff;
+  border-color: #cadceb;
+}
+
+.ai-review-banner {
+  background: #edf6ff;
+  border-color: #a9ccec;
+}
+
+.ai-review-banner.stale {
+  background: #fff8e8;
+  border-color: #e7c87c;
+}
+
+.ai-brand-chip {
+  color: #0755aa;
+  background: #e7f2ff !important;
+  border-color: #b7d3f0 !important;
+  font-weight: 800;
+}
+
+.ai-milestone-rationale {
+  background: #eef6ff;
+  border-left: 3px solid #78aee0;
   border-radius: 6px;
-  font-size: 0.8rem;
-  font-weight: 600;
+}
+
+.ai-disclosure {
+  margin: -4px 0 16px;
+  padding: 10px 12px;
+  color: var(--text-muted);
+  background: #f8fbff;
+  border: 1px solid #d8e5f1;
+  border-radius: 7px;
+  font-size: 0.76rem;
+}
+
+.ai-disclosure summary {
+  color: #315f8c;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.ai-disclosure p {
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+
+.milestone-editor {
+  background: #f8fbff;
+  border-color: #d8e4ef;
+  border-radius: 9px;
+}
+
+.topic-editor {
+  border-radius: 7px;
+}
+
+/*
+ * Blue-tinted task surfaces keep status distinctions while tying the
+ * interface together visually.
+ */
+.task-card {
+  --task-background: #f8fbff;
+  border-radius: 9px;
+}
+
+.task-card.pending {
+  --task-color: #b96b08;
+  --task-background: #fffaf1;
+}
+
+.task-card.completed {
+  --task-color: #15803d;
+  --task-background: #f4fbf6;
+}
+
+.task-card.skipped {
+  --task-color: #be3455;
+  --task-background: #fff7f9;
+}
+
+/*
+ * Analytics/adaptation panels are visually secondary to the core plan.
+ */
+.planner-side-column h2 {
+  font-size: 1.14rem;
+}
+
+.planner-side-column h3 {
+  font-size: 0.96rem;
+}
+
+.kaizen-insight {
+  background: #f5f9fe;
+  border-color: #d1dfed;
+}
+
+/*
+ * Responsive collapse. Tablet/mobile retain the established accessible
+ * single-column workflow.
+ */
+@media (max-width: 1100px) {
+  .app-container {
+    width: min(100% - 30px, 1120px);
+  }
+
+  .planner-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .planner-side-column {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .planner-side-column > * {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-container,
+  .auth-container {
+    width: min(100% - 20px, 760px);
+    padding-top: 14px;
+  }
+
+  .main-header {
+    padding: 22px 20px;
+  }
+
+  .planner-side-column {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* Dashboard redesign v2: compact KaizenAI workspace */
+
+:root {
+  --kaizen-sky: #b9e7ff;
+  --kaizen-sky-soft: #eef9ff;
+  --kaizen-sky-pale: #f7fcff;
+  --kaizen-blue: #1769aa;
+  --kaizen-blue-dark: #0f416d;
+  --kaizen-ink: #10243a;
+  --kaizen-muted: #62768a;
+  --kaizen-line: #d7e7f2;
+}
+
+/*
+ * Global workspace
+ */
+body {
+  background: #f4f9fd;
+}
+
+.app-container {
+  width: min(1440px, calc(100% - 44px));
+  padding-bottom: 44px;
+}
+
+/*
+ * Keep the existing header because it already reads well.
+ * Only tighten the transition into the dashboard.
+ */
+.main-header {
+  margin-bottom: 14px;
+}
+
+.goal-selector-card {
+  margin-bottom: 14px;
+}
+
+/*
+ * Balanced two-column dashboard:
+ * - left: learning plan, progress, generated tasks
+ * - right: analytics, adaptive estimation, availability
+ *
+ * Tasks now live inside the left column, eliminating the large blank area
+ * created by the previous full-width-after-grid arrangement.
+ */
+.planner-dashboard-grid {
+  grid-template-columns:
+    minmax(0, 1.45fr)
+    minmax(390px, 0.82fr);
+  gap: 16px;
+}
+
+.planner-main-column,
+.planner-side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.planner-main-column > *,
+.planner-side-column > * {
+  margin-bottom: 0 !important;
+}
+
+.tasks-panel {
+  margin-top: 0 !important;
+}
+
+/*
+ * Less generic "AI dashboard" styling:
+ * flatter cards, thinner borders, restrained radius, almost no floating.
+ */
+.card,
+.progress-dashboard {
+  padding: 20px;
+  border: 1px solid var(--kaizen-line);
+  border-radius: 8px;
+  box-shadow:
+    0 1px 3px rgba(26, 69, 103, 0.055);
+}
+
+.card:hover,
+.progress-dashboard:hover {
+  border-color: #c6ddeb;
+}
+
+button,
+input,
+select,
+textarea {
+  border-radius: 6px;
+}
+
+button:hover:not(:disabled) {
+  transform: none;
+}
+
+/*
+ * The user's chosen #b9e7ff works best as an accent/surface rather than
+ * button text colour. Darker blue provides accessible contrast.
+ */
+button:not(.danger-button),
+.primary-action {
+  border-color: #8accef;
+}
+
+button:not(.danger-button):not(.secondary-button),
+.primary-action {
+  color: #ffffff;
+  background: var(--kaizen-blue);
+}
+
+button:not(.danger-button):not(.secondary-button):hover,
+.primary-action:hover {
+  background: #12598f;
+}
+
+.secondary-button {
+  color: var(--kaizen-blue-dark);
+  background: var(--kaizen-sky-soft);
+  border-color: #a8d9f3;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #5eb5e6;
+  box-shadow:
+    0 0 0 3px rgba(185, 231, 255, 0.72);
+}
+
+/*
+ * Goal summary: reduce the huge white blank area and give the raw plan
+ * information a clearer hierarchy without changing its content.
+ */
+.planner-main-column > .card:first-child {
+  padding: 20px 22px;
+  border-top: 3px solid #69bde9;
+  background:
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #fbfdff 100%
+    );
+}
+
+.planner-main-column > .card:first-child h2 {
+  margin: 0 0 14px;
+  color: var(--kaizen-ink);
+  font-size: 1.3rem;
+}
+
+.planner-main-column > .card:first-child h3 {
+  margin-top: 18px;
+  margin-bottom: 8px;
+  color: var(--kaizen-blue-dark);
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.035em;
+}
+
+.planner-main-column > .card:first-child p {
+  margin: 7px 0;
+}
+
+.planner-main-column > .card:first-child ol,
+.planner-main-column > .card:first-child ul {
+  margin: 7px 0 0;
+  padding-left: 22px;
+}
+
+.planner-main-column > .card:first-child li {
+  margin: 4px 0;
+  line-height: 1.45;
+}
+
+/*
+ * Progress panel
+ */
+.progress-dashboard {
+  border-top: 3px solid #7ccaf1;
+}
+
+.progress-bar-track {
+  background: #e9f6fd;
+}
+
+.progress-bar-fill {
+  background: #3a9ed5;
+  box-shadow: none;
+}
+
+.progress-stat-card,
+.analytics-stat,
+.analytics-comparison > div,
+.task-count-grid > div {
+  background: #f8fcff;
+  border: 1px solid #dceaf4;
+  border-radius: 7px;
+}
+
+/*
+ * ANALYTICS
+ *
+ * The old panel had many equally-weighted little boxes, so users had to read
+ * everything to understand the important story. This creates a clearer visual
+ * order:
+ *   1. four headline metrics
+ *   2. planned vs actual comparison
+ *   3. task-state chips
+ *   4. one highlighted Kaizen recommendation
+ *   5. topic detail
+ */
+.planner-side-column > .card:first-child {
+  position: relative;
+  overflow: hidden;
+  border-top: 3px solid #49a9dc;
+}
+
+.planner-side-column > .card:first-child::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 92px;
+  height: 92px;
+  background: var(--kaizen-sky);
+  opacity: 0.22;
+  border-radius: 0 0 0 100%;
+  pointer-events: none;
+}
+
+.planner-side-column > .card:first-child h2 {
+  margin-bottom: 3px;
+  color: var(--kaizen-ink);
+  font-size: 1.12rem;
+}
+
+.planner-side-column > .card:first-child > p {
+  margin-bottom: 15px;
+  color: var(--kaizen-muted);
+}
+
+/*
+ * Headline metrics: slight tonal variation like a real product dashboard,
+ * while keeping all values readable.
+ */
+.analytics-grid {
+  display: grid !important;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr)) !important;
+  gap: 9px !important;
+}
+
+.analytics-stat {
+  min-height: 82px;
+  padding: 11px 12px !important;
+}
+
+.analytics-stat:nth-child(1) {
+  background: #eaf7ff;
+  border-color: #b9e7ff;
+}
+
+.analytics-stat:nth-child(2) {
+  background: #f2f8ff;
+  border-color: #cddff2;
+}
+
+.analytics-stat:nth-child(3) {
+  background: #eefaf7;
+  border-color: #cce9df;
+}
+
+.analytics-stat:nth-child(4) {
+  background: #fff9ec;
+  border-color: #eee0b6;
+}
+
+.analytics-stat strong,
+.analytics-stat .value,
+.analytics-stat-value {
+  color: var(--kaizen-ink);
+  font-size: 1.18rem !important;
+  line-height: 1.15;
+}
+
+.analytics-stat small,
+.analytics-stat span:first-child {
+  color: var(--kaizen-muted);
+}
+
+/*
+ * Planned vs actual: presented as one comparison strip rather than three
+ * disconnected cards.
+ */
+.analytics-comparison {
+  display: grid !important;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr)) !important;
+  gap: 0 !important;
+  margin-top: 10px !important;
+  overflow: hidden;
+  border: 1px solid #d8e7f1;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.analytics-comparison > div {
+  padding: 10px !important;
+  background: #ffffff !important;
+  border: 0 !important;
+  border-right: 1px solid #e3edf4 !important;
+  border-radius: 0 !important;
+}
+
+.analytics-comparison > div:last-child {
+  border-right: 0 !important;
+  background: #eef8ff !important;
+}
+
+/*
+ * Task state counts become compact pills instead of another card grid.
+ */
+.task-count-grid {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 6px !important;
+  margin: 10px 0 0 !important;
+}
+
+.task-count-grid > div {
+  min-width: 0 !important;
+  padding: 5px 9px !important;
+  background: #f5f9fc !important;
+  border-radius: 999px !important;
+  font-size: 0.72rem;
+}
+
+/*
+ * Kaizen recommendation is now the obvious interpretation layer.
+ */
+.kaizen-insight {
+  position: relative;
+  margin-top: 12px !important;
+  padding: 13px 14px 13px 17px !important;
+  color: var(--kaizen-ink);
+  background: #eaf7ff !important;
+  border: 1px solid #b9e7ff !important;
+  border-left: 4px solid #399ed4 !important;
+  border-radius: 7px !important;
+}
+
+.kaizen-insight::before {
+  content: "KAIZEN";
+  display: block;
+  margin-bottom: 5px;
+  color: #1769aa;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+}
+
+.kaizen-insight strong {
+  color: var(--kaizen-blue-dark);
+}
+
+/*
+ * Feedback/topic rows: less boxed, more table-like.
+ */
+.feedback-by-topic,
+.topic-feedback-list {
+  margin-top: 14px;
+}
+
+.feedback-by-topic > div,
+.topic-feedback-list > div {
+  padding: 9px 2px;
+  border-bottom: 1px solid #e4eef5;
+}
+
+.feedback-by-topic > div:last-child,
+.topic-feedback-list > div:last-child {
+  border-bottom: 0;
+}
+
+/*
+ * Adaptive estimation and availability are supporting tools, so visually
+ * soften them beneath analytics instead of making every section equally loud.
+ */
+.planner-side-column > *:not(:first-child) {
+  background: #ffffff;
+}
+
+.planner-side-column > *:not(:first-child) h2 {
+  color: var(--kaizen-blue-dark);
+}
+
+.ai-review-banner,
+.ai-planning-intro {
+  background: var(--kaizen-sky-soft);
+  border-color: #aeddf6;
+}
+
+/*
+ * Availability: keep it compact in the side column.
+ */
+.planner-side-column .availability-grid {
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.planner-side-column .availability-row {
+  padding: 8px;
+}
+
+/*
+ * Tasks: use available left-column width efficiently and keep status easy
+ * to scan. No unnecessary giant gaps.
+ */
+.tasks-panel .task-list,
+.tasks-panel .tasks-list {
+  display: grid;
+  gap: 9px;
+}
+
+.tasks-panel .task-card {
+  margin: 0;
+  padding: 13px 14px;
+}
+
+/*
+ * On wider desktop displays keep the composition dense rather than expanding
+ * cards indefinitely.
+ */
+@media (min-width: 1500px) {
+  .app-container {
+    width: min(1480px, calc(100% - 56px));
+  }
+}
+
+@media (max-width: 1150px) {
+  .planner-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .planner-main-column,
+  .planner-side-column {
+    gap: 14px;
+  }
+
+  .planner-side-column {
+    display: grid;
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .planner-side-column > .card:first-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-container {
+    width: min(100% - 20px, 760px);
+  }
+
+  .planner-side-column {
+    display: flex;
+  }
+
+  .analytics-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .analytics-comparison {
+    grid-template-columns: 1fr !important;
+  }
+
+  .analytics-comparison > div {
+    border-right: 0 !important;
+    border-bottom: 1px solid #e3edf4 !important;
+  }
+
+  .analytics-comparison > div:last-child {
+    border-bottom: 0 !important;
+  }
+}
+
+
+/* Final dashboard polish: balanced KaizenAI workspace */
+
+/*
+ * Overall balance
+ */
+.planner-dashboard-grid {
+  grid-template-columns:
+    minmax(0, 1.35fr)
+    minmax(420px, 0.78fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.planner-main-column,
+.planner-side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dashboard-wide-panel {
+  margin-top: 14px;
+}
+
+.dashboard-wide-panel > * {
+  margin-bottom: 0 !important;
+}
+
+/*
+ * GOAL OVERVIEW
+ */
+.planner-main-column > .card:first-child {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(0, 1.25fr);
+  column-gap: 16px;
+  row-gap: 10px;
+  padding: 20px;
+  background:
+    linear-gradient(
+      145deg,
+      #ffffff 0%,
+      #f8fcff 100%
+    );
+  border-top: 3px solid #69bde9;
+}
+
+.planner-main-column
+  > .card:first-child
+  > h2 {
+  grid-column: 1 / -1;
+  margin: 0 0 2px;
+  color: #10243a;
+  font-size: 1.3rem;
+  letter-spacing: -0.02em;
+}
+
+.planner-main-column
+  > .card:first-child
+  > p {
+  margin: 0;
+  padding: 10px 12px;
+  background: #eef9ff;
+  border: 1px solid #c9e9fa;
+  border-radius: 7px;
+  color: #38526b;
+}
+
+.planner-main-column
+  > .card:first-child
+  > p:first-of-type {
+  grid-column: 1;
+}
+
+.planner-main-column
+  > .card:first-child
+  > p:nth-of-type(2) {
+  grid-column: 2;
+}
+
+.planner-main-column
+  > .card:first-child
+  > p strong {
+  color: #153a59;
+}
+
+.planner-main-column
+  > .card:first-child
+  > h3 {
+  margin: 5px 0 -2px;
+  color: #1d5f90;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.planner-main-column
+  > .card:first-child
+  > h3:nth-of-type(1) {
+  grid-column: 1;
+  grid-row: 3;
+}
+
+.planner-main-column
+  > .card:first-child
+  > h3:nth-of-type(2) {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.planner-main-column
+  > .card:first-child
+  > ol {
+  grid-column: 1;
+  grid-row: 4;
+}
+
+.planner-main-column
+  > .card:first-child
+  > ul {
+  grid-column: 2;
+  grid-row: 4;
+}
+
+.planner-main-column
+  > .card:first-child
+  > ol,
+.planner-main-column
+  > .card:first-child
+  > ul {
+  min-height: 96px;
+  margin: 0;
+  padding: 12px 14px 12px 34px;
+  background: #ffffff;
+  border: 1px solid #dcebf5;
+  border-radius: 7px;
+}
+
+.planner-main-column
+  > .card:first-child
+  > ol li,
+.planner-main-column
+  > .card:first-child
+  > ul li {
+  margin: 5px 0;
+  line-height: 1.45;
+}
+
+/*
+ * GOAL PROGRESS
+ */
+.progress-dashboard {
+  background:
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #fbfdff 100%
+    );
+}
+
+.progress-stat-grid {
+  gap: 10px;
+}
+
+.progress-stat-card {
+  padding: 14px;
+  background: #f7fcff;
+  border-color: #d6e9f5;
+}
+
+.progress-stat-card:nth-child(1) {
+  background: #eef9ff;
+  border-color: #b9e7ff;
+}
+
+.progress-stat-card:nth-child(2) {
+  background: #f1f8ff;
+}
+
+.progress-stat-card:nth-child(3) {
+  background: #f7fbff;
+}
+
+.progress-stat-card:nth-child(4) {
+  background: #eef7fd;
+}
+
+/*
+ * LEARNING ANALYTICS
+ */
+.planner-side-column > .card:first-child {
+  padding: 20px;
+  background: #ffffff;
+  border-top: 3px solid #4da9dc;
+}
+
+.planner-side-column
+  > .card:first-child
+  .section-header {
+  margin-bottom: 14px;
+}
+
+.analytics-grid {
+  gap: 10px !important;
+}
+
+.analytics-stat {
+  position: relative;
+  min-height: 92px;
+  padding: 12px 13px !important;
+  overflow: hidden;
+}
+
+.analytics-stat::after {
+  content: "";
+  position: absolute;
+  right: -14px;
+  bottom: -22px;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: rgba(185, 231, 255, 0.38);
+  pointer-events: none;
+}
+
+.analytics-stat:nth-child(1) {
+  background: #eaf8ff;
+  border-color: #b9e7ff;
+}
+
+.analytics-stat:nth-child(2) {
+  background: #f0f7ff;
+  border-color: #c9dff1;
+}
+
+.analytics-stat:nth-child(3) {
+  background: #edf9f6;
+  border-color: #c9e8df;
+}
+
+.analytics-stat:nth-child(4) {
+  background: #fff8eb;
+  border-color: #ecdcb0;
+}
+
+.analytics-stat strong,
+.analytics-stat-value,
+.analytics-stat .value {
+  position: relative;
+  z-index: 1;
+  display: block;
+  margin-top: 4px;
+  color: #10243a;
+  font-size: 1.25rem !important;
+  letter-spacing: -0.025em;
+}
+
+.analytics-stat small,
+.analytics-stat span {
+  position: relative;
+  z-index: 1;
+}
+
+.analytics-comparison {
+  margin-top: 11px !important;
+  background: #f8fbfe;
+  border-color: #d7e6f1;
+}
+
+.analytics-comparison > div {
+  min-height: 70px;
+}
+
+.analytics-comparison > div:last-child {
+  background: #eaf7ff !important;
+}
+
+.task-count-grid {
+  margin-top: 10px !important;
+}
+
+.task-count-grid > div {
+  color: #38536c;
+  background: #f6faff !important;
+  border-color: #d7e6f2 !important;
+}
+
+.kaizen-insight {
+  margin-top: 14px !important;
+  padding: 15px 16px !important;
+  background:
+    linear-gradient(
+      135deg,
+      #e9f7ff 0%,
+      #f4fbff 100%
+    ) !important;
+  border-color: #b9e7ff !important;
+  border-left: 4px solid #2d98d0 !important;
+}
+
+.kaizen-insight::before {
+  content: "KAIZEN INSIGHT";
+  margin-bottom: 6px;
+  color: #1769aa;
+}
+
+.feedback-by-topic > div,
+.topic-feedback-list > div {
+  padding: 10px 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #e4eef5;
+  border-radius: 0;
+}
+
+.feedback-by-topic > div:last-child,
+.topic-feedback-list > div:last-child {
+  border-bottom: 0;
+}
+
+/*
+ * ADAPTIVE ESTIMATION
+ */
+.planner-side-column
+  > *:nth-child(2) {
+  background:
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #fbfdff 100%
+    );
+}
+
+.planner-side-column
+  > *:nth-child(2)
+  button:disabled {
+  opacity: 0.48;
+  box-shadow: none;
+}
+
+/*
+ * FULL-WIDTH ADAPTIVE AVAILABILITY
+ */
+.dashboard-availability-panel > .card {
+  padding: 20px;
+  border-top: 3px solid #79c7ed;
+  background:
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #fbfdff 100%
+    );
+}
+
+.dashboard-availability-panel
+  .availability-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(7, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.dashboard-availability-panel
+  .availability-row {
+  min-width: 0;
+  padding: 10px;
+  background: #f8fcff;
+  border: 1px solid #d7e8f3;
+  border-radius: 7px;
+}
+
+.dashboard-availability-panel
+  .availability-row.selected {
+  background: #eaf7ff;
+  border-color: #9bd6f5;
+  box-shadow:
+    inset 0 0 0 1px #b9e7ff;
+}
+
+.dashboard-availability-panel
+  .availability-row label {
+  min-width: 0;
+}
+
+.dashboard-availability-panel
+  .availability-row input[type="number"] {
+  width: 100%;
+  min-width: 0;
+}
+
+.dashboard-availability-panel
+  .feasibility-preview,
+.dashboard-availability-panel
+  .availability-preview {
+  margin-top: 12px;
+}
+
+/*
+ * FULL-WIDTH TASKS
+ */
+.tasks-panel {
+  margin-top: 14px !important;
+  border-top: 3px solid #5fb5e2;
+}
+
+.tasks-panel
+  .section-header {
+  margin-bottom: 12px;
+}
+
+.tasks-panel .task-card {
+  padding: 13px 15px;
+}
+
+@media (max-width: 1200px) {
+  .planner-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-availability-panel
+    .availability-grid {
+    grid-template-columns:
+      repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .planner-main-column
+    > .card:first-child {
+    display: block;
+  }
+
+  .planner-main-column
+    > .card:first-child
+    > p {
+    margin-top: 8px;
+  }
+
+  .planner-main-column
+    > .card:first-child
+    > h3 {
+    margin-top: 16px;
+  }
+
+  .planner-main-column
+    > .card:first-child
+    > ol,
+  .planner-main-column
+    > .card:first-child
+    > ul {
+    min-height: 0;
+  }
+
+  .dashboard-availability-panel
+    .availability-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+
+/* Final layout v3: compact analytics + full-width adaptation controls */
+
+/*
+ * Top dashboard:
+ * left = goal overview + progress
+ * right = analytics only
+ *
+ * With Adaptive Estimation moved out, both columns are now close enough in
+ * height that the large dead-space gap disappears.
+ */
+.planner-dashboard-grid {
+  grid-template-columns:
+    minmax(0, 1.42fr)
+    minmax(390px, 0.78fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.planner-side-column {
+  align-self: start;
+}
+
+/*
+ * Keep Learning Analytics dense and easy to scan.
+ */
+.planner-side-column > .card:first-child {
+  padding: 18px;
+}
+
+.planner-side-column
+  > .card:first-child
+  .analytics-grid {
+  gap: 8px !important;
+}
+
+.planner-side-column
+  > .card:first-child
+  .analytics-stat {
+  min-height: 78px;
+  padding: 10px 11px !important;
+}
+
+.planner-side-column
+  > .card:first-child
+  .analytics-stat strong,
+.planner-side-column
+  > .card:first-child
+  .analytics-stat-value,
+.planner-side-column
+  > .card:first-child
+  .analytics-stat .value {
+  font-size: 1.12rem !important;
+}
+
+.planner-side-column
+  > .card:first-child
+  .analytics-comparison {
+  margin-top: 8px !important;
+}
+
+.planner-side-column
+  > .card:first-child
+  .analytics-comparison > div {
+  min-height: 60px;
+  padding: 8px !important;
+}
+
+.planner-side-column
+  > .card:first-child
+  .task-count-grid {
+  margin-top: 8px !important;
+}
+
+.planner-side-column
+  > .card:first-child
+  .kaizen-insight {
+  margin-top: 10px !important;
+  padding: 12px 13px !important;
+}
+
+.planner-side-column
+  > .card:first-child
+  .feedback-by-topic,
+.planner-side-column
+  > .card:first-child
+  .topic-feedback-list {
+  margin-top: 10px;
+}
+
+/*
+ * Adaptive Estimation works better as a full-width decision strip than as a
+ * tall sidebar. Existing component content is unchanged.
+ */
+.dashboard-estimation-panel {
+  margin-top: 14px;
+}
+
+.dashboard-estimation-panel > * {
+  width: 100%;
+  margin-bottom: 0 !important;
+}
+
+.dashboard-estimation-panel > .card {
+  padding: 18px 20px;
+  border-top: 3px solid #66b9e4;
+  background:
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #fbfdff 100%
+    );
+}
+
+.dashboard-estimation-panel
+  .metric-grid,
+.dashboard-estimation-panel
+  .adaptive-metrics-grid {
+  display: grid !important;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+.dashboard-estimation-panel
+  .metric-grid > div,
+.dashboard-estimation-panel
+  .adaptive-metrics-grid > div,
+.dashboard-estimation-panel
+  .adaptive-metric {
+  min-width: 0;
+  padding: 10px !important;
+  background: #f7fbff;
+  border: 1px solid #d8e8f3;
+  border-radius: 7px;
+}
+
+.dashboard-estimation-panel
+  button:disabled {
+  opacity: 0.45;
+}
+
+/*
+ * ADAPTIVE AVAILABILITY
+ *
+ * Seven tiny cards in one row were too cramped. A 4+3 layout reads more like
+ * a weekly planning control and keeps inputs comfortably sized.
+ */
+.dashboard-availability-panel {
+  margin-top: 14px;
+}
+
+.dashboard-availability-panel > .card {
+  padding: 18px 20px;
+}
+
+.dashboard-availability-panel
+  .availability-grid {
+  display: grid !important;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+
+.dashboard-availability-panel
+  .availability-row {
+  min-height: 72px;
+  padding: 10px 11px !important;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(78px, 104px);
+  gap: 8px;
+  align-items: center;
+}
+
+.dashboard-availability-panel
+  .availability-row
+  .checkbox-label {
+  min-width: 0;
+}
+
+.dashboard-availability-panel
+  .availability-row
+  input[type="number"] {
+  width: 100%;
+  min-width: 0;
+}
+
+/*
+ * Make the feasibility preview a compact horizontal summary rather than a
+ * large green block with unused space.
+ */
+.dashboard-availability-panel
+  .feasibility-preview,
+.dashboard-availability-panel
+  .availability-preview {
+  display: grid;
+  grid-template-columns:
+    minmax(240px, 1.2fr)
+    minmax(0, 2fr);
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 13px 14px;
+}
+
+.dashboard-availability-panel
+  .feasibility-preview
+  .metric-grid,
+.dashboard-availability-panel
+  .availability-preview
+  .metric-grid {
+  display: grid !important;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+/*
+ * If the component has an actions row, keep it right-aligned and compact.
+ */
+.dashboard-availability-panel
+  .availability-actions,
+.dashboard-availability-panel
+  .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/*
+ * Tasks remain full width.
+ */
+.tasks-panel {
+  margin-top: 14px !important;
+}
+
+/*
+ * Responsive behaviour.
+ */
+@media (max-width: 1200px) {
+  .planner-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-estimation-panel
+    .metric-grid,
+  .dashboard-estimation-panel
+    .adaptive-metrics-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .dashboard-availability-panel
+    .availability-grid {
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboard-estimation-panel
+    .metric-grid,
+  .dashboard-estimation-panel
+    .adaptive-metrics-grid,
+  .dashboard-availability-panel
+    .availability-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .dashboard-availability-panel
+    .availability-row {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-availability-panel
+    .feasibility-preview,
+  .dashboard-availability-panel
+    .availability-preview {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Final privacy, cookie and AI transparency disclosure */
+.privacy-notice {
+  margin-top: 1.25rem;
+  border: 1px solid #c8dced;
+  border-radius: 16px;
+  background: #f7fbff;
+  overflow: hidden;
+}
+
+.privacy-notice details {
+  width: 100%;
+}
+
+.privacy-notice summary {
+  cursor: pointer;
+  padding: 1rem 1.1rem;
+  font-weight: 700;
+  color: #17365d;
+  background: #eaf7ff;
+}
+
+.privacy-notice summary:focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: -4px;
+}
+
+.privacy-notice-content {
+  padding: 0 1.1rem 1.15rem;
+}
+
+.privacy-notice-content h2 {
+  margin-bottom: 0.4rem;
+}
+
+.privacy-notice-content h3 {
+  margin-bottom: 0.35rem;
+  font-size: 1rem;
+}
+
+.privacy-notice-content p {
+  margin-top: 0.35rem;
+  line-height: 1.55;
+}
+
+.privacy-notice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.privacy-notice-grid > section,
+.privacy-prototype-note {
+  border: 1px solid #d9e7f2;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 0.9rem;
+}
+
+.privacy-prototype-note {
+  margin-top: 0.9rem;
+}
+
+.privacy-notice code {
+  font-size: 0.9em;
+}
+
+@media (max-width: 720px) {
+  .privacy-notice-grid {
+    grid-template-columns: 1fr;
+  }
 }

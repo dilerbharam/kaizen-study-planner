@@ -22,22 +22,27 @@ describe("calculateGoalProgress", () => {
     const result = calculateGoalProgress({
       topics: [
         {
+          id: 1,
           estimated_minutes: 120,
         },
         {
+          id: 2,
           estimated_minutes: 180,
         },
       ],
       tasks: [
         {
+          topic_id: 1,
           status: "completed",
           estimated_minutes: 60,
         },
         {
+          topic_id: 1,
           status: "pending",
           estimated_minutes: 60,
         },
         {
+          topic_id: 2,
           status: "skipped",
           estimated_minutes: 60,
         },
@@ -78,15 +83,18 @@ describe("calculateGoalProgress", () => {
     const result = calculateGoalProgress({
       topics: [
         {
+          id: 1,
           estimated_minutes: 120,
         },
       ],
       tasks: [
         {
+          topic_id: 1,
           status: "completed",
           estimated_minutes: 60,
         },
         {
+          topic_id: 1,
           status: "completed",
           estimated_minutes: 60,
         },
@@ -113,15 +121,18 @@ describe("calculateGoalProgress", () => {
     const result = calculateGoalProgress({
       topics: [
         {
+          id: 1,
           estimated_minutes: 600,
         },
       ],
       tasks: [
         {
+          topic_id: 1,
           status: "completed",
           estimated_minutes: 60,
         },
         {
+          topic_id: 1,
           status: "pending",
           estimated_minutes: 540,
         },
@@ -154,15 +165,18 @@ describe("calculateGoalProgress", () => {
     const result = calculateGoalProgress({
       topics: [
         {
+          id: 1,
           estimated_minutes: 300,
         },
       ],
       tasks: [
         {
+          topic_id: 1,
           status: "completed",
           estimated_minutes: 60,
         },
         {
+          topic_id: 1,
           status: "pending",
           estimated_minutes: 240,
         },
@@ -173,6 +187,7 @@ describe("calculateGoalProgress", () => {
     });
 
     expect(result.remainingMinutes).toBe(240);
+
     expect(
       result.availableMinutesBeforeDeadline
     ).toBe(0);
@@ -210,19 +225,23 @@ describe("calculateGoalProgress", () => {
     const result = calculateGoalProgress({
       topics: [
         {
+          id: 1,
           estimated_minutes: 120,
         },
       ],
       tasks: [
         {
+          topic_id: 1,
           status: "completed",
           estimated_minutes: 60,
         },
         {
+          topic_id: 1,
           status: "completed",
           estimated_minutes: 60,
         },
         {
+          topic_id: 1,
           status: "completed",
           estimated_minutes: 60,
         },
@@ -238,6 +257,46 @@ describe("calculateGoalProgress", () => {
     expect(result.completionPercentage).toBe(100);
 
     expect(result.taskCounts.completed).toBe(3);
+  });
+
+  test("does not allow completed minutes from one topic to satisfy another topic", () => {
+    const result = calculateGoalProgress({
+      topics: [
+        {
+          id: 1,
+          estimated_minutes: 60,
+        },
+        {
+          id: 2,
+          estimated_minutes: 60,
+        },
+      ],
+      tasks: [
+        {
+          topic_id: 1,
+          status: "completed",
+          estimated_minutes: 60,
+        },
+        {
+          topic_id: 1,
+          status: "completed",
+          estimated_minutes: 60,
+        },
+        {
+          topic_id: 2,
+          status: "pending",
+          estimated_minutes: 60,
+        },
+      ],
+      availability: standardAvailability,
+      targetDate: new Date(2026, 6, 31),
+      currentDate: new Date(2026, 6, 1),
+    });
+
+    expect(result.totalPlannedMinutes).toBe(120);
+    expect(result.completedMinutes).toBe(60);
+    expect(result.remainingMinutes).toBe(60);
+    expect(result.completionPercentage).toBe(50);
   });
 
   test("returns an error for an invalid target date", () => {

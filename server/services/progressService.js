@@ -3,6 +3,10 @@ const {
   normaliseDate,
 } = require("./schedulingService");
 
+const {
+  calculateRemainingTopics,
+} = require("./regenerationService");
+
 /**
  * Calculates progress and deadline feasibility for a learning goal.
  */
@@ -13,26 +17,21 @@ function calculateGoalProgress({
   targetDate,
   currentDate = new Date(),
 }) {
-  const totalPlannedMinutes = topics.reduce(
-    (total, topic) =>
-      total + Number(topic.estimated_minutes),
-    0
-  );
+  // Reuse the topic-aware accounting used by regeneration.
+  // Completed minutes are capped against each individual topic,
+  // preventing duplicate historical records for one topic from
+  // incorrectly satisfying planned work belonging to another topic.
+  const progressAccounting =
+    calculateRemainingTopics({
+      topics,
+      tasks,
+    });
 
-  const rawCompletedMinutes = tasks
-    .filter((task) => task.status === "completed")
-    .reduce(
-      (total, task) =>
-        total + Number(task.estimated_minutes),
-      0
-    );
+  const totalPlannedMinutes =
+    progressAccounting.totalPlannedMinutes;
 
-  // Prevent historical or duplicated task records from making
-  // progress exceed the original planned learning duration.
-  const completedMinutes = Math.min(
-    rawCompletedMinutes,
-    totalPlannedMinutes
-  );
+  const completedMinutes =
+    progressAccounting.totalCompletedMinutes;
 
   const remainingMinutes = Math.max(
     totalPlannedMinutes - completedMinutes,

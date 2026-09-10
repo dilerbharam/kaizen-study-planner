@@ -1,8 +1,28 @@
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
+const { rateLimit } = require("express-rate-limit");
+const cookieParser = require("cookie-parser");
 require("dotenv").config();
 
 const pool = require("./db");
+
+const authenticate =
+  require("./middleware/authenticate");
+
+const {
+  AUTH_COOKIE_NAME,
+  hashPassword,
+  verifyPassword,
+  createAuthToken,
+  getAuthCookieOptions,
+} = require("./services/authService");
+
+const {
+  findOwnedGoal,
+  findOwnedMilestone,
+  findOwnedTask,
+} = require("./services/ownershipService");
 
 const {
   normaliseDate,
@@ -23,11 +43,84 @@ const {
   calculateRemainingTopics,
 } = require("./services/regenerationService");
 
+const {
+  evaluateRescheduleEligibility,
+} = require("./services/rescheduleEligibilityService");
+
+const {
+  validateCompletionFeedback,
+} = require("./services/completionFeedbackService");
+
+const {
+  calculateGoalAnalytics,
+} = require("./services/analyticsService");
+
+const {
+  calculateAdaptiveEstimate,
+} = require("./services/adaptiveEstimationService");
+
+const {
+  generateGeminiPlanDraft,
+} = require("./services/geminiPlanningService");
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
-app.use(express.json());
+const CLIENT_ORIGIN =
+  process.env.CLIENT_ORIGIN ||
+  "http://localhost:5173";
+
+
+/*
+ * Security controls for authentication and external AI generation.
+ *
+ * Authentication requests are limited primarily to slow repeated
+ * credential guessing. Successful requests are not counted against
+ * the authentication limit.
+ */
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: {
+    error:
+      "Too many authentication attempts. Try again later.",
+  },
+});
+
+/*
+ * AI generation is deliberately bounded because it depends on an
+ * external provider and consumes a limited external service quota.
+ */
+const aiPlanningLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 15,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: {
+    error:
+      "Too many KaizenAI planning requests. Try again later.",
+  },
+});
+
+/*
+ * Helmet applies defensive HTTP response headers. Express'
+ * framework-identifying header is also disabled explicitly.
+ */
+app.disable("x-powered-by");
+app.use(helmet());
+
+app.use(
+  cors({
+    origin: CLIENT_ORIGIN,
+    credentials: true,
+  })
+);
+
+app.use(express.json({ limit: "100kb" }));
+app.use(cookieParser());
 
 app.get("/", (req, res) => {
   res.send("Kaizen Study Planner API is running");
@@ -54,18 +147,372 @@ app.get("/test-db", async (req, res) => {
 });
 
 /*
+ * Creates a new authenticated user account.
+ */
+app.post(
+  "/api/auth/register",
+  authLimiter,
+  async (req, res) => {
+    try {
+      const name =
+        String(req.body.name || "").trim();
+
+      const email =
+        String(req.body.email || "")
+          .trim()
+          .toLowerCase();
+
+      const password =
+        String(
+          req.body.password || ""
+        );
+
+      if (
+        !name ||
+        name.length > 100
+      ) {
+        return res.status(400).json({
+          error:
+            "Name is required and must be 100 characters or fewer.",
+        });
+      }
+
+      if (
+        !email ||
+        email.length > 150 ||
+        !email.includes("@")
+      ) {
+        return res.status(400).json({
+          error:
+            "Enter a valid email address.",
+        });
+      }
+
+      if (password.length < 10) {
+        return res.status(400).json({
+          error:
+            "Password must contain at least 10 characters.",
+        });
+      }
+
+      const existingUser =
+        await pool.query(
+          `SELECT id
+           FROM users
+           WHERE LOWER(email) = LOWER($1)`,
+          [email]
+        );
+
+      if (
+        existingUser.rows.length > 0
+      ) {
+        return res.status(409).json({
+          error:
+            "An account with this email already exists.",
+        });
+      }
+
+      const passwordHash =
+        await hashPassword(password);
+
+      const result =
+        await pool.query(
+          `INSERT INTO users
+            (
+              name,
+              email,
+              password_hash
+            )
+           VALUES ($1, $2, $3)
+           RETURNING
+             id,
+             name,
+             email,
+             created_at`,
+          [
+            name,
+            email,
+            passwordHash,
+          ]
+        );
+
+      const user = result.rows[0];
+
+      const token =
+        createAuthToken(user.id);
+
+      res.cookie(
+        AUTH_COOKIE_NAME,
+        token,
+        getAuthCookieOptions()
+      );
+
+      return res.status(201).json({
+        message:
+          "Account created successfully.",
+        user,
+      });
+    } catch (error) {
+      if (error.code === "23505") {
+        return res.status(409).json({
+          error:
+            "An account with this email already exists.",
+        });
+      }
+
+      console.error(
+        "Registration failed:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Account could not be created.",
+      });
+    }
+  }
+);
+
+/*
+ * Authenticates an existing user.
+ */
+app.post(
+  "/api/auth/login",
+  authLimiter,
+  async (req, res) => {
+    try {
+      const email =
+        String(req.body.email || "")
+          .trim()
+          .toLowerCase();
+
+      const password =
+        String(
+          req.body.password || ""
+        );
+
+      if (!email || !password) {
+        return res.status(400).json({
+          error:
+            "Email and password are required.",
+        });
+      }
+
+      const result =
+        await pool.query(
+          `SELECT
+             id,
+             name,
+             email,
+             password_hash,
+             created_at
+           FROM users
+           WHERE LOWER(email) = LOWER($1)`,
+          [email]
+        );
+
+      const user = result.rows[0];
+
+      const passwordMatches =
+        user
+          ? await verifyPassword(
+              password,
+              user.password_hash
+            )
+          : false;
+
+      if (
+        !user ||
+        !passwordMatches
+      ) {
+        return res.status(401).json({
+          error:
+            "Invalid email or password.",
+        });
+      }
+
+      const token =
+        createAuthToken(user.id);
+
+      res.cookie(
+        AUTH_COOKIE_NAME,
+        token,
+        getAuthCookieOptions()
+      );
+
+      return res.json({
+        message:
+          "Login successful.",
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          created_at:
+            user.created_at,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Login failed:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Login could not be completed.",
+      });
+    }
+  }
+);
+
+/*
+ * Returns the currently authenticated user.
+ */
+app.get(
+  "/api/auth/me",
+  authenticate,
+  async (req, res) => {
+    try {
+      const result =
+        await pool.query(
+          `SELECT
+             id,
+             name,
+             email,
+             created_at
+           FROM users
+           WHERE id = $1`,
+          [req.user.id]
+        );
+
+      if (
+        result.rows.length === 0
+      ) {
+        return res.status(401).json({
+          error:
+            "Authenticated user no longer exists.",
+        });
+      }
+
+      return res.json({
+        user: result.rows[0],
+      });
+    } catch (error) {
+      console.error(
+        "Failed to retrieve authenticated user:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Authenticated user could not be retrieved.",
+      });
+    }
+  }
+);
+
+/*
+ * Ends the current authentication session.
+ */
+app.post(
+  "/api/auth/logout",
+  (req, res) => {
+    res.clearCookie(
+      AUTH_COOKIE_NAME,
+      getAuthCookieOptions()
+    );
+
+    return res.json({
+      message:
+        "Logout successful.",
+    });
+  }
+);
+
+/*
+ * Generates a Gemini-assisted learning-plan draft.
+ *
+ * No learning-plan data is persisted here. Gemini only proposes
+ * structured content; the learner reviews the editable draft and
+ * explicitly approves it through the normal goal-creation flow.
+ */
+app.post(
+  "/api/ai/gemini-plan-draft",
+  authenticate,
+  aiPlanningLimiter,
+  async (req, res) => {
+    try {
+      const {
+        goalDescription,
+        targetDate,
+        currentLevel,
+        preferences,
+        availability,
+      } = req.body;
+
+      const result =
+        await generateGeminiPlanDraft({
+          goalDescription,
+          targetDate,
+          currentLevel,
+          preferences,
+          availability,
+        });
+
+      if (!result.valid) {
+        return res
+          .status(
+            result.statusCode ||
+              400
+          )
+          .json({
+            error:
+              result.error,
+          });
+      }
+
+      return res.json({
+        message:
+          "Gemini draft generated. Review and edit it before creating the learning plan.",
+        provider:
+          result.provider,
+        model:
+          result.model,
+        thinkingLevel:
+          result.thinkingLevel,
+        availableMinutes:
+          result.availableMinutes,
+        planningBudgetMinutes:
+          result
+            .planningBudgetMinutes,
+        draft:
+          result.draft,
+      });
+    } catch (error) {
+      console.error(
+        "Failed to generate Gemini learning-plan draft:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "The Gemini learning-plan draft could not be generated.",
+      });
+    }
+  }
+);
+
+/*
  * Retrieves all goals belonging to a user.
  */
-app.get("/api/goals/:userId", async (req, res) => {
+app.get("/api/goals", authenticate, async (req, res) => {
   try {
-    const { userId } = req.params;
-
     const goalsResult = await pool.query(
       `SELECT *
        FROM goals
        WHERE user_id = $1
        ORDER BY id`,
-      [userId]
+      [req.user.id]
     );
 
     return res.json(goalsResult.rows);
@@ -83,18 +530,18 @@ app.get("/api/goals/:userId", async (req, res) => {
  */
 app.get(
   "/api/goals/:goalId/details",
+  authenticate,
   async (req, res) => {
     try {
       const { goalId } = req.params;
 
-      const goalResult = await pool.query(
-        `SELECT *
-         FROM goals
-         WHERE id = $1`,
-        [goalId]
+      const goal = await findOwnedGoal(
+        pool,
+        goalId,
+        req.user.id
       );
 
-      if (goalResult.rows.length === 0) {
+      if (!goal) {
         return res.status(404).json({
           error: "Goal not found",
         });
@@ -121,7 +568,7 @@ app.get(
       );
 
       return res.json({
-        goal: goalResult.rows[0],
+        goal,
         milestones: milestonesResult.rows,
         topics: topicsResult.rows,
       });
@@ -140,77 +587,138 @@ app.get(
 
 /*
  * Creates a new learning goal.
+ *
+ * AI-assisted plans reach this route only after the learner has
+ * reviewed the editable draft. The AI prompt is not persisted;
+ * only provider/model provenance and review time are stored.
  */
-app.post("/api/goals", async (req, res) => {
+app.post("/api/goals", authenticate, async (req, res) => {
   try {
     const {
-      userId,
       title,
       targetDate,
+      planSource = "manual",
+      aiProvider = null,
+      aiModel = null,
     } = req.body;
 
     if (
-      !userId ||
       !title?.trim() ||
       !targetDate
     ) {
       return res.status(400).json({
         error:
-          "User ID, goal title and target date are required.",
+          "Goal title and target date are required.",
+      });
+    }
+
+    const allowedPlanSources =
+      new Set([
+        "manual",
+        "ai_assisted",
+      ]);
+
+    if (
+      !allowedPlanSources.has(
+        planSource
+      )
+    ) {
+      return res.status(400).json({
+        error:
+          "Invalid learning-plan source.",
       });
     }
 
     const parsedTargetDate =
       normaliseDate(targetDate);
 
-    const today = normaliseDate(new Date());
+    const today =
+      normaliseDate(new Date());
 
     if (!parsedTargetDate) {
       return res.status(400).json({
-        error: "The target date is invalid.",
+        error:
+          "The target date is invalid.",
       });
     }
 
-    if (parsedTargetDate < today) {
+    if (
+      parsedTargetDate < today
+    ) {
       return res.status(400).json({
         error:
           "The target date must be today or a future date.",
       });
     }
 
-    const userResult = await pool.query(
-      `SELECT id
-       FROM users
-       WHERE id = $1`,
-      [userId]
-    );
+    const cleanAiProvider =
+      planSource ===
+        "ai_assisted"
+        ? String(
+            aiProvider || ""
+          )
+            .trim()
+            .slice(0, 40) ||
+          null
+        : null;
 
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({
-        error: "User not found.",
-      });
-    }
+    const cleanAiModel =
+      planSource ===
+        "ai_assisted"
+        ? String(
+            aiModel || ""
+          )
+            .trim()
+            .slice(0, 80) ||
+          null
+        : null;
 
-    const goalResult = await pool.query(
-      `INSERT INTO goals
-        (
-          user_id,
-          title,
-          target_date,
-          status
-        )
-       VALUES ($1, $2, $3, 'active')
-       RETURNING *`,
-      [
-        userId,
-        title.trim(),
-        targetDate,
-      ]
-    );
+    const goalResult =
+      await pool.query(
+        `INSERT INTO goals
+          (
+            user_id,
+            title,
+            target_date,
+            status,
+            plan_source,
+            ai_provider,
+            ai_model,
+            ai_reviewed_at
+          )
+         VALUES (
+           $1,
+           $2,
+           $3,
+           'active',
+           $4,
+           $5,
+           $6,
+           CASE
+             WHEN $4 = 'ai_assisted'
+               THEN CURRENT_TIMESTAMP
+             ELSE NULL
+           END
+         )
+         RETURNING *`,
+        [
+          req.user.id,
+          title.trim(),
+          targetDate,
+          planSource,
+          cleanAiProvider,
+          cleanAiModel,
+        ]
+      );
 
     return res.status(201).json({
-      message: "Goal created successfully.",
-      goal: goalResult.rows[0],
+      message:
+        planSource ===
+          "ai_assisted"
+          ? "Reviewed AI-assisted goal created successfully."
+          : "Goal created successfully.",
+      goal:
+        goalResult.rows[0],
     });
   } catch (error) {
     console.error(
@@ -219,7 +727,8 @@ app.post("/api/goals", async (req, res) => {
     );
 
     return res.status(500).json({
-      error: "Failed to create goal.",
+      error:
+        "Failed to create goal.",
     });
   }
 });
@@ -229,6 +738,7 @@ app.post("/api/goals", async (req, res) => {
  */
 app.post(
   "/api/goals/:goalId/milestones",
+  authenticate,
   async (req, res) => {
     try {
       const { goalId } = req.params;
@@ -244,14 +754,13 @@ app.post(
         });
       }
 
-      const goalResult = await pool.query(
-        `SELECT id
-         FROM goals
-         WHERE id = $1`,
-        [goalId]
+      const goal = await findOwnedGoal(
+        pool,
+        goalId,
+        req.user.id
       );
 
-      if (goalResult.rows.length === 0) {
+      if (!goal) {
         return res.status(404).json({
           error: "Goal not found.",
         });
@@ -313,6 +822,7 @@ app.post(
  */
 app.post(
   "/api/milestones/:milestoneId/topics",
+  authenticate,
   async (req, res) => {
     try {
       const { milestoneId } = req.params;
@@ -343,17 +853,14 @@ app.post(
         });
       }
 
-      const milestoneResult =
-        await pool.query(
-          `SELECT id
-           FROM milestones
-           WHERE id = $1`,
-          [milestoneId]
+      const milestone =
+        await findOwnedMilestone(
+          pool,
+          milestoneId,
+          req.user.id
         );
 
-      if (
-        milestoneResult.rows.length === 0
-      ) {
+      if (!milestone) {
         return res.status(404).json({
           error: "Milestone not found.",
         });
@@ -415,18 +922,18 @@ app.post(
  */
 app.get(
   "/api/goals/:goalId/availability",
+  authenticate,
   async (req, res) => {
     try {
       const { goalId } = req.params;
 
-      const goalResult = await pool.query(
-        `SELECT id
-         FROM goals
-         WHERE id = $1`,
-        [goalId]
+      const goal = await findOwnedGoal(
+        pool,
+        goalId,
+        req.user.id
       );
 
-      if (goalResult.rows.length === 0) {
+      if (!goal) {
         return res.status(404).json({
           error: "Goal not found.",
         });
@@ -463,6 +970,7 @@ app.get(
  */
 app.put(
   "/api/goals/:goalId/availability",
+  authenticate,
   async (req, res) => {
     const client = await pool.connect();
     let transactionStarted = false;
@@ -496,14 +1004,11 @@ app.put(
         });
       }
 
-      const goalResult = await client.query(
-        `SELECT id, user_id
-         FROM goals
-         WHERE id = $1`,
-        [goalId]
+      const goal = await findOwnedGoal(
+        client,
+        goalId,
+        req.user.id
       );
-
-      const goal = goalResult.rows[0];
 
       if (!goal) {
         return res.status(404).json({
@@ -586,6 +1091,7 @@ app.put(
  */
 app.post(
   "/api/goals/:goalId/generate-tasks",
+  authenticate,
   async (req, res) => {
     const client = await pool.connect();
     let transactionStarted = false;
@@ -593,14 +1099,11 @@ app.post(
     try {
       const { goalId } = req.params;
 
-      const goalResult = await client.query(
-        `SELECT *
-         FROM goals
-         WHERE id = $1`,
-        [goalId]
+      const goal = await findOwnedGoal(
+        client,
+        goalId,
+        req.user.id
       );
-
-      const goal = goalResult.rows[0];
 
       if (!goal) {
         return res.status(404).json({
@@ -1017,58 +1520,69 @@ app.post(
 /*
  * Retrieves tasks for a goal.
  *
- * can_reschedule is calculated by the backend so the
- * interface cannot offer duplicate rescheduling.
+ * Rescheduling eligibility is derived by the backend so the
+ * interface does not offer actions that the scheduling rules
+ * will subsequently reject.
  */
 app.get(
   "/api/goals/:goalId/tasks",
+  authenticate,
   async (req, res) => {
     try {
       const { goalId } = req.params;
 
+      const goal = await findOwnedGoal(
+        pool,
+        goalId,
+        req.user.id
+      );
+
+      if (!goal) {
+        return res.status(404).json({
+          error: "Goal not found.",
+        });
+      }
+
       const tasksResult = await pool.query(
         `SELECT
            tasks.*,
-           CASE
-             WHEN tasks.status = 'skipped'
-               AND tasks.rescheduled_at IS NULL
-               AND NOT EXISTS (
-                 SELECT 1
-                 FROM tasks AS linked_replacement
-                 WHERE linked_replacement
-                         .rescheduled_from_task_id =
-                       tasks.id
-               )
-               AND NOT EXISTS (
-                 SELECT 1
-                 FROM tasks AS active_equivalent
-                 WHERE active_equivalent.topic_id =
-                       tasks.topic_id
-                   AND active_equivalent.status =
-                       'pending'
-                   AND regexp_replace(
-                         active_equivalent.task_text,
-                         '\\s+\\(Rescheduled\\)$',
-                         '',
-                         'i'
-                       )
-                       =
-                       regexp_replace(
-                         tasks.task_text,
-                         '\\s+\\(Rescheduled\\)$',
-                         '',
-                         'i'
-                       )
-               )
-             THEN TRUE
-             ELSE FALSE
-           END AS can_reschedule
+           goals.target_date,
+           EXISTS (
+             SELECT 1
+             FROM tasks AS linked_replacement
+             WHERE linked_replacement
+                     .rescheduled_from_task_id =
+                   tasks.id
+           ) AS has_linked_replacement,
+           EXISTS (
+             SELECT 1
+             FROM tasks AS active_equivalent
+             WHERE active_equivalent.topic_id =
+                   tasks.topic_id
+               AND active_equivalent.status =
+                   'pending'
+               AND regexp_replace(
+                     active_equivalent.task_text,
+                     '\\s+\\(Rescheduled\\)$',
+                     '',
+                     'i'
+                   )
+                   =
+                   regexp_replace(
+                     tasks.task_text,
+                     '\\s+\\(Rescheduled\\)$',
+                     '',
+                     'i'
+                   )
+           ) AS has_active_equivalent
          FROM tasks
          JOIN topics
            ON tasks.topic_id = topics.id
          JOIN milestones
            ON topics.milestone_id =
               milestones.id
+         JOIN goals
+           ON milestones.goal_id = goals.id
          WHERE milestones.goal_id = $1
          ORDER BY
            tasks.scheduled_date,
@@ -1076,7 +1590,35 @@ app.get(
         [goalId]
       );
 
-      return res.json(tasksResult.rows);
+      const tasks =
+        tasksResult.rows.map((task) => {
+          const eligibility =
+            evaluateRescheduleEligibility({
+              task,
+              targetDate: task.target_date,
+              hasLinkedReplacement:
+                task.has_linked_replacement,
+              hasActiveEquivalent:
+                task.has_active_equivalent,
+            });
+
+          const {
+            target_date,
+            has_linked_replacement,
+            has_active_equivalent,
+            ...taskData
+          } = task;
+
+          return {
+            ...taskData,
+            can_reschedule:
+              eligibility.canReschedule,
+            reschedule_status:
+              eligibility.status,
+          };
+        });
+
+      return res.json(tasks);
     } catch (error) {
       console.error(
         "Failed to fetch tasks:",
@@ -1095,18 +1637,16 @@ app.get(
  */
 app.get(
   "/api/goals/:goalId/progress",
+  authenticate,
   async (req, res) => {
     try {
       const { goalId } = req.params;
 
-      const goalResult = await pool.query(
-        `SELECT *
-         FROM goals
-         WHERE id = $1`,
-        [goalId]
+      const goal = await findOwnedGoal(
+        pool,
+        goalId,
+        req.user.id
       );
-
-      const goal = goalResult.rows[0];
 
       if (!goal) {
         return res.status(404).json({
@@ -1191,14 +1731,564 @@ app.get(
 );
 
 /*
+ * Returns learning analytics for a goal owned by the
+ * authenticated user.
+ *
+ * Historical skipped records remain visible as process evidence,
+ * while completion rate excludes skipped history to avoid counting
+ * replaced work twice.
+ */
+app.get(
+  "/api/goals/:goalId/analytics",
+  authenticate,
+  async (req, res) => {
+    try {
+      const { goalId } = req.params;
+
+      const goal =
+        await findOwnedGoal(
+          pool,
+          goalId,
+          req.user.id
+        );
+
+      if (!goal) {
+        return res.status(404).json({
+          error: "Goal not found.",
+        });
+      }
+
+      const tasksResult =
+        await pool.query(
+          `SELECT
+             tasks.*,
+             topics.title AS topic_title
+           FROM tasks
+           JOIN topics
+             ON tasks.topic_id = topics.id
+           JOIN milestones
+             ON topics.milestone_id =
+                milestones.id
+           WHERE milestones.goal_id = $1
+           ORDER BY
+             tasks.scheduled_date,
+             tasks.id`,
+          [goalId]
+        );
+
+      const analytics =
+        calculateGoalAnalytics(
+          tasksResult.rows
+        );
+
+      return res.json({
+        goal: {
+          id: goal.id,
+          title: goal.title,
+          target_date:
+            goal.target_date,
+        },
+        analytics,
+      });
+    } catch (error) {
+      console.error(
+        "Failed to calculate goal analytics:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Failed to calculate goal analytics.",
+      });
+    }
+  }
+);
+
+/*
+ * Previews a conservative estimate calibration from completion
+ * feedback recorded since the last approved adaptation.
+ */
+app.get(
+  "/api/goals/:goalId/adaptive-estimate",
+  authenticate,
+  async (req, res) => {
+    try {
+      const { goalId } = req.params;
+
+      const goal =
+        await findOwnedGoal(
+          pool,
+          goalId,
+          req.user.id
+        );
+
+      if (!goal) {
+        return res.status(404).json({
+          error: "Goal not found.",
+        });
+      }
+
+      const topicsResult =
+        await pool.query(
+          `SELECT topics.*
+           FROM topics
+           JOIN milestones
+             ON topics.milestone_id =
+                milestones.id
+           WHERE milestones.goal_id = $1
+           ORDER BY
+             milestones.sequence_order,
+             topics.sequence_order`,
+          [goalId]
+        );
+
+      const tasksResult =
+        await pool.query(
+          `SELECT tasks.*
+           FROM tasks
+           JOIN topics
+             ON tasks.topic_id = topics.id
+           JOIN milestones
+             ON topics.milestone_id =
+                milestones.id
+           WHERE milestones.goal_id = $1
+           ORDER BY
+             tasks.scheduled_date,
+             tasks.id`,
+          [goalId]
+        );
+
+      const availabilityResult =
+        await pool.query(
+          `SELECT *
+           FROM availability
+           WHERE goal_id = $1
+           ORDER BY id`,
+          [goalId]
+        );
+
+      const availabilityValidation =
+        validateAvailability(
+          availabilityResult.rows
+        );
+
+      if (
+        !availabilityValidation.valid
+      ) {
+        return res.status(400).json({
+          error:
+            availabilityValidation.error,
+        });
+      }
+
+      const recommendation =
+        calculateAdaptiveEstimate({
+          topics: topicsResult.rows,
+          tasks: tasksResult.rows,
+          availability:
+            availabilityResult.rows,
+          targetDate: goal.target_date,
+          currentMultiplier:
+            goal.estimation_multiplier,
+          lastAdaptationAt:
+            goal.adaptation_updated_at,
+        });
+
+      if (!recommendation.valid) {
+        return res.status(400).json({
+          error: recommendation.error,
+        });
+      }
+
+      return res.json({
+        goal: {
+          id: goal.id,
+          title: goal.title,
+          estimation_multiplier:
+            goal.estimation_multiplier,
+          adaptation_updated_at:
+            goal.adaptation_updated_at,
+          adaptation_feedback_count:
+            goal.adaptation_feedback_count,
+        },
+        recommendation,
+      });
+    } catch (error) {
+      console.error(
+        "Failed to calculate adaptive estimate:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Failed to calculate adaptive estimate.",
+      });
+    }
+  }
+);
+
+/*
+ * Applies a learner-approved estimate calibration and rebalances
+ * ordinary unfinished work in one transaction.
+ *
+ * Completed/skipped history remains immutable and pending
+ * replacement tasks retain their reschedule lineage.
+ */
+app.post(
+  "/api/goals/:goalId/adaptive-estimate/apply",
+  authenticate,
+  async (req, res) => {
+    const client =
+      await pool.connect();
+
+    let transactionStarted =
+      false;
+
+    try {
+      const { goalId } = req.params;
+
+      const goal =
+        await findOwnedGoal(
+          client,
+          goalId,
+          req.user.id
+        );
+
+      if (!goal) {
+        return res.status(404).json({
+          error: "Goal not found.",
+        });
+      }
+
+      const topicsResult =
+        await client.query(
+          `SELECT topics.*
+           FROM topics
+           JOIN milestones
+             ON topics.milestone_id =
+                milestones.id
+           WHERE milestones.goal_id = $1
+           ORDER BY
+             milestones.sequence_order,
+             topics.sequence_order`,
+          [goalId]
+        );
+
+      const tasksResult =
+        await client.query(
+          `SELECT tasks.*
+           FROM tasks
+           JOIN topics
+             ON tasks.topic_id = topics.id
+           JOIN milestones
+             ON topics.milestone_id =
+                milestones.id
+           WHERE milestones.goal_id = $1
+           ORDER BY
+             tasks.scheduled_date,
+             tasks.id`,
+          [goalId]
+        );
+
+      const availabilityResult =
+        await client.query(
+          `SELECT *
+           FROM availability
+           WHERE goal_id = $1
+           ORDER BY id`,
+          [goalId]
+        );
+
+      const availability =
+        availabilityResult.rows;
+
+      const availabilityValidation =
+        validateAvailability(
+          availability
+        );
+
+      if (
+        !availabilityValidation.valid
+      ) {
+        return res.status(400).json({
+          error:
+            availabilityValidation.error,
+        });
+      }
+
+      const topics =
+        topicsResult.rows;
+
+      const tasks =
+        tasksResult.rows;
+
+      const recommendation =
+        calculateAdaptiveEstimate({
+          topics,
+          tasks,
+          availability,
+          targetDate: goal.target_date,
+          currentMultiplier:
+            goal.estimation_multiplier,
+          lastAdaptationAt:
+            goal.adaptation_updated_at,
+        });
+
+      if (!recommendation.valid) {
+        return res.status(400).json({
+          error: recommendation.error,
+        });
+      }
+
+      if (!recommendation.canApply) {
+        return res.status(400).json({
+          error:
+            recommendation.message,
+          recommendation,
+        });
+      }
+
+      const today =
+        normaliseDate(new Date());
+
+      const targetDate =
+        normaliseDate(
+          goal.target_date
+        );
+
+      if (!today || !targetDate) {
+        return res.status(400).json({
+          error:
+            "The goal contains an invalid target date.",
+        });
+      }
+
+      const protectedWorkloadByDate =
+        new Map();
+
+      for (const task of tasks) {
+        const protectedReplacement =
+          task.status === "pending" &&
+          task.rescheduled_from_task_id !==
+            null &&
+          task.rescheduled_from_task_id !==
+            undefined;
+
+        if (!protectedReplacement) {
+          continue;
+        }
+
+        const taskDate =
+          normaliseDate(
+            task.scheduled_date
+          );
+
+        if (
+          !taskDate ||
+          taskDate < today ||
+          taskDate > targetDate
+        ) {
+          continue;
+        }
+
+        const dateKey =
+          formatDate(taskDate);
+
+        protectedWorkloadByDate.set(
+          dateKey,
+          (
+            protectedWorkloadByDate.get(
+              dateKey
+            ) || 0
+          ) +
+            Number(
+              task.estimated_minutes
+            )
+        );
+      }
+
+      const tasksForRebalance =
+        recommendation
+          .affectedTopics
+          .filter(
+            (topic) =>
+              topic
+                .adjusted_remaining_minutes >
+              0
+          )
+          .map((topic) => ({
+            id: topic.id,
+            topic_id: topic.id,
+            task_text:
+              `Study: ${topic.title}`,
+            estimated_minutes:
+              topic
+                .adjusted_remaining_minutes,
+            status: "pending",
+          }));
+
+      const scheduleResult =
+        rebalanceTasks({
+          tasks: tasksForRebalance,
+          availability,
+          workloadByDate:
+            protectedWorkloadByDate,
+          startDate: today,
+          targetDate,
+        });
+
+      if (!scheduleResult.complete) {
+        return res.status(422).json({
+          error:
+            "The adapted schedule could not be generated within the available capacity.",
+          remaining_minutes:
+            scheduleResult.remainingMinutes,
+        });
+      }
+
+      await client.query("BEGIN");
+      transactionStarted = true;
+
+      for (
+        const topic of
+        recommendation.affectedTopics
+      ) {
+        await client.query(
+          `UPDATE topics
+           SET estimated_minutes = $1
+           WHERE id = $2`,
+          [
+            topic.adjusted_total_minutes,
+            topic.id,
+          ]
+        );
+      }
+
+      const deletedPendingResult =
+        await client.query(
+          `DELETE FROM tasks
+           WHERE status = 'pending'
+             AND rescheduled_from_task_id IS NULL
+             AND topic_id IN (
+               SELECT topics.id
+               FROM topics
+               JOIN milestones
+                 ON topics.milestone_id =
+                    milestones.id
+               WHERE milestones.goal_id = $1
+             )
+           RETURNING id`,
+          [goalId]
+        );
+
+      const generatedTasks = [];
+
+      for (
+        const task of scheduleResult.tasks
+      ) {
+        const insertedTask =
+          await client.query(
+            `INSERT INTO tasks
+              (
+                topic_id,
+                scheduled_date,
+                task_text,
+                estimated_minutes,
+                status,
+                rescheduled_from_task_id
+              )
+             VALUES (
+               $1,
+               $2,
+               $3,
+               $4,
+               $5,
+               NULL
+             )
+             RETURNING *`,
+            [
+              task.topicId,
+              task.scheduledDate,
+              task.taskText,
+              task.estimatedMinutes,
+              task.status,
+            ]
+          );
+
+        generatedTasks.push(
+          insertedTask.rows[0]
+        );
+      }
+
+      await client.query(
+        `UPDATE goals
+         SET
+           estimation_multiplier = $1,
+           adaptation_feedback_count =
+             adaptation_feedback_count + $2,
+           adaptation_updated_at =
+             CURRENT_TIMESTAMP
+         WHERE id = $3`,
+        [
+          recommendation
+            .proposedCumulativeMultiplier,
+          recommendation.feedbackCount,
+          goalId,
+        ]
+      );
+
+      await client.query("COMMIT");
+      transactionStarted = false;
+
+      return res.json({
+        message:
+          "Adaptive estimate approved and unfinished schedule rebalanced.",
+        recommendation,
+        removed_pending_tasks:
+          deletedPendingResult.rowCount,
+        tasks_created:
+          generatedTasks.length,
+        tasks: generatedTasks,
+      });
+    } catch (error) {
+      if (transactionStarted) {
+        await client.query(
+          "ROLLBACK"
+        );
+      }
+
+      console.error(
+        "Failed to apply adaptive estimate:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Failed to apply adaptive estimate.",
+      });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+/*
  * Updates a pending task's status.
+ *
+ * Completing a task records observed study time and perceived
+ * difficulty for later Kaizen evaluation and adaptation.
  */
 app.patch(
   "/api/tasks/:taskId/status",
+  authenticate,
   async (req, res) => {
     try {
       const { taskId } = req.params;
-      const { status } = req.body;
+      const {
+        status,
+        actualMinutes,
+        difficultyRating,
+      } = req.body;
 
       const allowedStatuses = [
         "completed",
@@ -1212,15 +2302,12 @@ app.patch(
         });
       }
 
-      const taskResult = await pool.query(
-        `SELECT *
-         FROM tasks
-         WHERE id = $1`,
-        [taskId]
-      );
-
       const existingTask =
-        taskResult.rows[0];
+        await findOwnedTask(
+          pool,
+          taskId,
+          req.user.id
+        );
 
       if (!existingTask) {
         return res.status(404).json({
@@ -1237,18 +2324,62 @@ app.patch(
         });
       }
 
-      const updatedTaskResult =
-        await pool.query(
-          `UPDATE tasks
-           SET status = $1
-           WHERE id = $2
-           RETURNING *`,
-          [status, taskId]
-        );
+      let completionFeedback = null;
+
+      if (status === "completed") {
+        completionFeedback =
+          validateCompletionFeedback({
+            actualMinutes,
+            difficultyRating,
+          });
+
+        if (!completionFeedback.valid) {
+          return res.status(400).json({
+            error:
+              completionFeedback.error,
+          });
+        }
+      }
+
+      let updatedTaskResult;
+
+      if (status === "completed") {
+        updatedTaskResult =
+          await pool.query(
+            `UPDATE tasks
+             SET
+               status = 'completed',
+               actual_minutes = $1,
+               difficulty_rating = $2,
+               completed_at = CURRENT_TIMESTAMP
+             WHERE id = $3
+             RETURNING *`,
+            [
+              completionFeedback.actualMinutes,
+              completionFeedback.difficultyRating,
+              taskId,
+            ]
+          );
+      } else {
+        updatedTaskResult =
+          await pool.query(
+            `UPDATE tasks
+             SET
+               status = 'skipped',
+               actual_minutes = NULL,
+               difficulty_rating = NULL,
+               completed_at = NULL
+             WHERE id = $1
+             RETURNING *`,
+            [taskId]
+          );
+      }
 
       return res.json({
         message:
-          "Task status updated successfully",
+          status === "completed"
+            ? "Task completed and learning feedback saved."
+            : "Task skipped successfully.",
         task: updatedTaskResult.rows[0],
       });
     } catch (error) {
@@ -1270,9 +2401,14 @@ app.patch(
  *
  * Existing replacement tasks are protected so their
  * reschedule lineage is not deleted or changed.
+ *
+ * Eligibility is checked before rebalancing so the API
+ * rejects expired goals and duplicate replacement attempts
+ * consistently with the task-list capability information.
  */
 app.post(
   "/api/tasks/:taskId/reschedule",
+  authenticate,
   async (req, res) => {
     const client = await pool.connect();
     let transactionStarted = false;
@@ -1280,27 +2416,12 @@ app.post(
     try {
       const { taskId } = req.params;
 
-      const skippedTaskResult =
-        await client.query(
-          `SELECT
-             tasks.*,
-             goals.id AS goal_id,
-             goals.user_id,
-             goals.target_date
-           FROM tasks
-           JOIN topics
-             ON tasks.topic_id = topics.id
-           JOIN milestones
-             ON topics.milestone_id =
-                milestones.id
-           JOIN goals
-             ON milestones.goal_id = goals.id
-           WHERE tasks.id = $1`,
-          [taskId]
-        );
-
       const skippedTask =
-        skippedTaskResult.rows[0];
+        await findOwnedTask(
+          client,
+          taskId,
+          req.user.id
+        );
 
       if (!skippedTask) {
         return res.status(404).json({
@@ -1317,10 +2438,27 @@ app.post(
         });
       }
 
-      if (skippedTask.rescheduled_at) {
-        return res.status(409).json({
+      const targetDate =
+        normaliseDate(
+          skippedTask.target_date
+        );
+
+      const skippedDate =
+        normaliseDate(
+          skippedTask.scheduled_date
+        );
+
+      const today =
+        normaliseDate(new Date());
+
+      if (
+        !targetDate ||
+        !skippedDate ||
+        !today
+      ) {
+        return res.status(400).json({
           error:
-            "This skipped task has already been rescheduled.",
+            "The task contains an invalid date.",
         });
       }
 
@@ -1333,19 +2471,10 @@ app.post(
           [skippedTask.id]
         );
 
-      if (
-        existingLinkedReplacementResult.rows
-          .length > 0
-      ) {
-        return res.status(409).json({
-          error:
-            "This skipped task has already been rescheduled.",
-        });
-      }
-
       /*
-       * Prevent legacy duplicate skipped rows from creating
-       * extra pending work when equivalent work already exists.
+       * Prevent legacy duplicate skipped rows from
+       * creating extra pending work when equivalent
+       * work already exists.
        */
       const activeEquivalentResult =
         await client.query(
@@ -1373,12 +2502,61 @@ app.post(
           ]
         );
 
-      if (
-        activeEquivalentResult.rows.length > 0
-      ) {
-        return res.status(409).json({
+      const eligibility =
+        evaluateRescheduleEligibility({
+          task: skippedTask,
+          targetDate,
+          currentDate: today,
+          hasLinkedReplacement:
+            existingLinkedReplacementResult
+              .rows.length > 0,
+          hasActiveEquivalent:
+            activeEquivalentResult
+              .rows.length > 0,
+        });
+
+      if (!eligibility.canReschedule) {
+        if (
+          eligibility.status ===
+          "Replacement created"
+        ) {
+          return res.status(409).json({
+            error:
+              "This skipped task has already been rescheduled.",
+            reason:
+              "replacement-created",
+          });
+        }
+
+        if (
+          eligibility.status ===
+          "Covered by current schedule"
+        ) {
+          return res.status(409).json({
+            error:
+              "Equivalent pending work already exists for this skipped task.",
+            reason:
+              "covered-by-current-schedule",
+          });
+        }
+
+        if (
+          eligibility.status ===
+          "Deadline passed"
+        ) {
+          return res.status(422).json({
+            error:
+              "This task cannot be rescheduled because the goal deadline has passed.",
+            reason:
+              "deadline-passed",
+          });
+        }
+
+        return res.status(400).json({
           error:
-            "Equivalent pending work already exists for this skipped task.",
+            "This task cannot currently be rescheduled.",
+          reason:
+            "reschedule-unavailable",
         });
       }
 
@@ -1403,31 +2581,6 @@ app.post(
         return res.status(400).json({
           error:
             availabilityValidation.error,
-        });
-      }
-
-      const targetDate =
-        normaliseDate(
-          skippedTask.target_date
-        );
-
-      const skippedDate =
-        normaliseDate(
-          skippedTask.scheduled_date
-        );
-
-      const today = normaliseDate(
-        new Date()
-      );
-
-      if (
-        !targetDate ||
-        !skippedDate ||
-        !today
-      ) {
-        return res.status(400).json({
-          error:
-            "The task contains an invalid date.",
         });
       }
 
