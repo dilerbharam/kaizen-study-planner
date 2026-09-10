@@ -1,4 +1,5 @@
 import { useState } from "react";
+import PrivacyNotice from "./PrivacyNotice";
 import api from "../services/api";
 
 function AuthForm({ onAuthenticated }) {
@@ -91,13 +92,13 @@ function AuthForm({ onAuthenticated }) {
   };
 
   return (
-    <main className="app-container">
+    <main className="app-container auth-container">
       <header className="main-header">
         <div>
-          <h1>Kaizen Study Planner</h1>
+          <h1>KaizenAI</h1>
           <p className="subtitle">
-            Adaptive micro-task planner for
-            structured learning
+            Adaptive study planning through
+            continuous improvement
           </p>
         </div>
       </header>
@@ -219,7 +220,8 @@ function AuthForm({ onAuthenticated }) {
             </button>
           </div>
         </form>
-      </section>
+            <PrivacyNotice />
+    </section>
     </main>
   );
 }

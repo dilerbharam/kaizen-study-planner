@@ -1,5 +1,7 @@
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
+const { rateLimit } = require("express-rate-limit");
 const cookieParser = require("cookie-parser");
 require("dotenv").config();
 
@@ -57,12 +59,58 @@ const {
   calculateAdaptiveEstimate,
 } = require("./services/adaptiveEstimationService");
 
+const {
+  generateGeminiPlanDraft,
+} = require("./services/geminiPlanningService");
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 const CLIENT_ORIGIN =
   process.env.CLIENT_ORIGIN ||
   "http://localhost:5173";
+
+
+/*
+ * Security controls for authentication and external AI generation.
+ *
+ * Authentication requests are limited primarily to slow repeated
+ * credential guessing. Successful requests are not counted against
+ * the authentication limit.
+ */
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: {
+    error:
+      "Too many authentication attempts. Try again later.",
+  },
+});
+
+/*
+ * AI generation is deliberately bounded because it depends on an
+ * external provider and consumes a limited external service quota.
+ */
+const aiPlanningLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 15,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: {
+    error:
+      "Too many KaizenAI planning requests. Try again later.",
+  },
+});
+
+/*
+ * Helmet applies defensive HTTP response headers. Express'
+ * framework-identifying header is also disabled explicitly.
+ */
+app.disable("x-powered-by");
+app.use(helmet());
 
 app.use(
   cors({
@@ -71,7 +119,7 @@ app.use(
   })
 );
 
-app.use(express.json());
+app.use(express.json({ limit: "100kb" }));
 app.use(cookieParser());
 
 app.get("/", (req, res) => {
@@ -103,6 +151,7 @@ app.get("/test-db", async (req, res) => {
  */
 app.post(
   "/api/auth/register",
+  authLimiter,
   async (req, res) => {
     try {
       const name =
@@ -229,6 +278,7 @@ app.post(
  */
 app.post(
   "/api/auth/login",
+  authLimiter,
   async (req, res) => {
     try {
       const email =
@@ -380,6 +430,79 @@ app.post(
 );
 
 /*
+ * Generates a Gemini-assisted learning-plan draft.
+ *
+ * No learning-plan data is persisted here. Gemini only proposes
+ * structured content; the learner reviews the editable draft and
+ * explicitly approves it through the normal goal-creation flow.
+ */
+app.post(
+  "/api/ai/gemini-plan-draft",
+  authenticate,
+  aiPlanningLimiter,
+  async (req, res) => {
+    try {
+      const {
+        goalDescription,
+        targetDate,
+        currentLevel,
+        preferences,
+        availability,
+      } = req.body;
+
+      const result =
+        await generateGeminiPlanDraft({
+          goalDescription,
+          targetDate,
+          currentLevel,
+          preferences,
+          availability,
+        });
+
+      if (!result.valid) {
+        return res
+          .status(
+            result.statusCode ||
+              400
+          )
+          .json({
+            error:
+              result.error,
+          });
+      }
+
+      return res.json({
+        message:
+          "Gemini draft generated. Review and edit it before creating the learning plan.",
+        provider:
+          result.provider,
+        model:
+          result.model,
+        thinkingLevel:
+          result.thinkingLevel,
+        availableMinutes:
+          result.availableMinutes,
+        planningBudgetMinutes:
+          result
+            .planningBudgetMinutes,
+        draft:
+          result.draft,
+      });
+    } catch (error) {
+      console.error(
+        "Failed to generate Gemini learning-plan draft:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "The Gemini learning-plan draft could not be generated.",
+      });
+    }
+  }
+);
+
+/*
  * Retrieves all goals belonging to a user.
  */
 app.get("/api/goals", authenticate, async (req, res) => {
@@ -464,12 +587,19 @@ app.get(
 
 /*
  * Creates a new learning goal.
+ *
+ * AI-assisted plans reach this route only after the learner has
+ * reviewed the editable draft. The AI prompt is not persisted;
+ * only provider/model provenance and review time are stored.
  */
 app.post("/api/goals", authenticate, async (req, res) => {
   try {
     const {
       title,
       targetDate,
+      planSource = "manual",
+      aiProvider = null,
+      aiModel = null,
     } = req.body;
 
     if (
@@ -482,44 +612,113 @@ app.post("/api/goals", authenticate, async (req, res) => {
       });
     }
 
-    const parsedTargetDate =
-      normaliseDate(targetDate);
+    const allowedPlanSources =
+      new Set([
+        "manual",
+        "ai_assisted",
+      ]);
 
-    const today = normaliseDate(new Date());
-
-    if (!parsedTargetDate) {
+    if (
+      !allowedPlanSources.has(
+        planSource
+      )
+    ) {
       return res.status(400).json({
-        error: "The target date is invalid.",
+        error:
+          "Invalid learning-plan source.",
       });
     }
 
-    if (parsedTargetDate < today) {
+    const parsedTargetDate =
+      normaliseDate(targetDate);
+
+    const today =
+      normaliseDate(new Date());
+
+    if (!parsedTargetDate) {
+      return res.status(400).json({
+        error:
+          "The target date is invalid.",
+      });
+    }
+
+    if (
+      parsedTargetDate < today
+    ) {
       return res.status(400).json({
         error:
           "The target date must be today or a future date.",
       });
     }
 
-    const goalResult = await pool.query(
-      `INSERT INTO goals
-        (
-          user_id,
-          title,
-          target_date,
-          status
-        )
-       VALUES ($1, $2, $3, 'active')
-       RETURNING *`,
-      [
-        req.user.id,
-        title.trim(),
-        targetDate,
-      ]
-    );
+    const cleanAiProvider =
+      planSource ===
+        "ai_assisted"
+        ? String(
+            aiProvider || ""
+          )
+            .trim()
+            .slice(0, 40) ||
+          null
+        : null;
+
+    const cleanAiModel =
+      planSource ===
+        "ai_assisted"
+        ? String(
+            aiModel || ""
+          )
+            .trim()
+            .slice(0, 80) ||
+          null
+        : null;
+
+    const goalResult =
+      await pool.query(
+        `INSERT INTO goals
+          (
+            user_id,
+            title,
+            target_date,
+            status,
+            plan_source,
+            ai_provider,
+            ai_model,
+            ai_reviewed_at
+          )
+         VALUES (
+           $1,
+           $2,
+           $3,
+           'active',
+           $4,
+           $5,
+           $6,
+           CASE
+             WHEN $4 = 'ai_assisted'
+               THEN CURRENT_TIMESTAMP
+             ELSE NULL
+           END
+         )
+         RETURNING *`,
+        [
+          req.user.id,
+          title.trim(),
+          targetDate,
+          planSource,
+          cleanAiProvider,
+          cleanAiModel,
+        ]
+      );
 
     return res.status(201).json({
-      message: "Goal created successfully.",
-      goal: goalResult.rows[0],
+      message:
+        planSource ===
+          "ai_assisted"
+          ? "Reviewed AI-assisted goal created successfully."
+          : "Goal created successfully.",
+      goal:
+        goalResult.rows[0],
     });
   } catch (error) {
     console.error(
@@ -528,7 +727,8 @@ app.post("/api/goals", authenticate, async (req, res) => {
     );
 
     return res.status(500).json({
-      error: "Failed to create goal.",
+      error:
+        "Failed to create goal.",
     });
   }
 });

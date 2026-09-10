@@ -1452,3 +1452,1884 @@ p {
     flex-direction: column;
   }
 }
+
+
+/* Feature 6: Gemini-assisted plan creation */
+
+.plan-mode-selector {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0 20px;
+}
+
+.plan-mode-card {
+  display: grid;
+  grid-template-columns:
+    auto 1fr;
+  column-gap: 10px;
+  row-gap: 4px;
+  align-items: start;
+  padding: 14px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.plan-mode-card.selected {
+  border-color: var(--primary);
+  box-shadow:
+    0 0 0 1px var(--primary);
+}
+
+.plan-mode-card input {
+  grid-row: 1 / span 2;
+  margin-top: 3px;
+}
+
+.plan-mode-card strong {
+  color: var(--text);
+}
+
+.plan-mode-card span {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.setup-card textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+}
+
+.optional-label {
+  margin-left: 6px;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.ai-planning-intro,
+.ai-generation-panel,
+.ai-review-banner,
+.ai-assumptions,
+.ai-privacy-note {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.ai-planning-intro {
+  margin-bottom: 16px;
+  background: #eff6ff;
+}
+
+.ai-privacy-note {
+  margin: 16px 0;
+  background: #fff7ed;
+}
+
+.ai-planning-intro p,
+.ai-privacy-note p,
+.ai-generation-panel p,
+.ai-review-banner p {
+  margin: 4px 0 0;
+}
+
+.ai-generation-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 16px 0;
+  background: var(--surface-muted);
+}
+
+.ai-generation-panel > div {
+  max-width: 660px;
+}
+
+.ai-review-banner {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 16px 0;
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.ai-review-banner.stale {
+  background: #fff7ed;
+  border-color: #fdba74;
+}
+
+.ai-draft-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+  align-content: flex-start;
+}
+
+.ai-draft-meta span {
+  padding: 5px 8px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.ai-assumptions {
+  margin-bottom: 16px;
+  background: var(--surface-muted);
+}
+
+.ai-assumptions ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.ai-assumptions li {
+  margin: 4px 0;
+  color: var(--text-muted);
+}
+
+.ai-milestone-rationale {
+  margin: 6px 0 10px;
+  padding: 8px 10px;
+  background: #eff6ff;
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+@media (max-width: 720px) {
+  .plan-mode-selector {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-generation-panel,
+  .ai-review-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ai-draft-meta {
+    justify-content: flex-start;
+  }
+}
+
+
+/* Feature 6 UI polish: KaizenAI blue workspace */
+
+:root {
+  --background: #f2f6fb;
+  --surface: #ffffff;
+  --surface-soft: #f7faff;
+  --surface-muted: #edf4fb;
+
+  --text: #152235;
+  --text-muted: #607086;
+  --text-light: #8492a6;
+
+  --border: #d8e3ef;
+  --border-strong: #c6d5e5;
+
+  --primary: #0b63ce;
+  --primary-dark: #084ea5;
+  --primary-soft: #e8f2ff;
+
+  --shadow-sm:
+    0 1px 2px rgba(15, 54, 92, 0.04);
+
+  --shadow-md:
+    0 3px 14px rgba(15, 54, 92, 0.07);
+
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+}
+
+body {
+  background: #f2f6fb;
+}
+
+/*
+ * Use more of a desktop viewport. The previous 1080px shell left
+ * large empty side gutters on common 1440p/desktop displays.
+ */
+.app-container {
+  width: min(1480px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 24px 0 56px;
+}
+
+.auth-container {
+  width: min(980px, calc(100% - 48px));
+}
+
+/*
+ * Flatter, product-style top bar: blue rather than purple,
+ * fewer decorative shapes, tighter vertical footprint.
+ */
+.main-header {
+  min-height: 116px;
+  margin-bottom: 18px;
+  padding: 24px 30px;
+  background:
+    linear-gradient(
+      125deg,
+      #083b73 0%,
+      #0b63ce 62%,
+      #1677d2 100%
+    );
+  border: 1px solid #0a57b5;
+  border-radius: 12px;
+  box-shadow:
+    0 6px 20px rgba(8, 59, 115, 0.13);
+}
+
+.main-header::before,
+.main-header::after {
+  display: none;
+}
+
+.main-header h1 {
+  font-size: clamp(2rem, 3vw, 2.5rem);
+  letter-spacing: -0.04em;
+}
+
+.subtitle {
+  max-width: 720px;
+  margin-top: 7px;
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.main-header p:not(.subtitle) {
+  margin-bottom: 0;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.82rem;
+}
+
+/*
+ * Reduce the generic "floating rounded card" appearance.
+ */
+.card,
+.progress-dashboard {
+  margin-bottom: 18px;
+  padding: 22px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+}
+
+.card:hover,
+.progress-dashboard:hover {
+  border-color: #ccd9e6;
+}
+
+button {
+  border-radius: 7px;
+  box-shadow: none;
+}
+
+button:hover:not(:disabled) {
+  box-shadow:
+    0 3px 10px rgba(11, 99, 206, 0.16);
+  transform: none;
+}
+
+input,
+select,
+textarea {
+  border-radius: 7px;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--primary);
+  box-shadow:
+    0 0 0 3px rgba(11, 99, 206, 0.1);
+  outline: none;
+}
+
+.secondary-button {
+  color: #0959b5;
+  background: #edf5ff;
+  border-color: #bad5f4;
+}
+
+.goal-selector-card {
+  padding: 16px 20px;
+}
+
+.goal-selector-card label {
+  grid-template-columns:
+    minmax(150px, 210px)
+    minmax(0, 1fr);
+}
+
+/*
+ * Desktop workspace layout.
+ * Main learning status uses the larger left column.
+ * Controls/analytics use a persistent right column instead of a
+ * long single stack in the middle of the screen.
+ */
+.planner-dashboard-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1.65fr)
+    minmax(340px, 0.85fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.planner-main-column,
+.planner-side-column {
+  min-width: 0;
+}
+
+.planner-side-column {
+  display: grid;
+  gap: 16px;
+}
+
+.planner-side-column > * {
+  margin-bottom: 0;
+}
+
+.planner-side-column .card,
+.planner-side-column .progress-dashboard {
+  padding: 20px;
+}
+
+.tasks-panel {
+  margin-top: 2px;
+}
+
+/*
+ * Make the goal overview feel like a dashboard rather than a report page.
+ */
+.planner-main-column
+  > .card:first-child {
+  border-top:
+    3px solid var(--primary);
+}
+
+.planner-main-column
+  > .card:first-child
+  > h2 {
+  margin-bottom: 12px;
+}
+
+.progress-dashboard {
+  border-top:
+    3px solid #2e7fd5;
+}
+
+.progress-stat-card,
+.analytics-stat,
+.analytics-comparison > div,
+.task-count-grid > div {
+  background: #f8fbff;
+  border-color: #d9e6f2;
+  border-radius: 8px;
+}
+
+.progress-bar-fill {
+  background:
+    linear-gradient(
+      90deg,
+      #0b63ce,
+      #2d87dc
+    );
+  box-shadow:
+    0 2px 6px rgba(11, 99, 206, 0.18);
+}
+
+/*
+ * KaizenAI creation experience.
+ */
+.plan-mode-selector {
+  gap: 14px;
+}
+
+.plan-mode-card {
+  padding: 16px;
+  background: #f8fbff;
+  border: 1px solid #d3e1ef;
+  border-radius: 9px;
+}
+
+.plan-mode-card.selected {
+  background: #eaf4ff;
+  border-color: #3b84cf;
+  box-shadow:
+    inset 3px 0 0 #0b63ce;
+}
+
+.ai-planning-intro {
+  background: #eef6ff;
+  border-color: #c5dcf5;
+}
+
+.ai-generation-panel {
+  background: #f7faff;
+  border-color: #d5e3f0;
+}
+
+.ai-privacy-note {
+  background: #f8fbff;
+  border-color: #cadceb;
+}
+
+.ai-review-banner {
+  background: #edf6ff;
+  border-color: #a9ccec;
+}
+
+.ai-review-banner.stale {
+  background: #fff8e8;
+  border-color: #e7c87c;
+}
+
+.ai-brand-chip {
+  color: #0755aa;
+  background: #e7f2ff !important;
+  border-color: #b7d3f0 !important;
+  font-weight: 800;
+}
+
+.ai-milestone-rationale {
+  background: #eef6ff;
+  border-left: 3px solid #78aee0;
+  border-radius: 6px;
+}
+
+.ai-disclosure {
+  margin: -4px 0 16px;
+  padding: 10px 12px;
+  color: var(--text-muted);
+  background: #f8fbff;
+  border: 1px solid #d8e5f1;
+  border-radius: 7px;
+  font-size: 0.76rem;
+}
+
+.ai-disclosure summary {
+  color: #315f8c;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.ai-disclosure p {
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+
+.milestone-editor {
+  background: #f8fbff;
+  border-color: #d8e4ef;
+  border-radius: 9px;
+}
+
+.topic-editor {
+  border-radius: 7px;
+}
+
+/*
+ * Blue-tinted task surfaces keep status distinctions while tying the
+ * interface together visually.
+ */
+.task-card {
+  --task-background: #f8fbff;
+  border-radius: 9px;
+}
+
+.task-card.pending {
+  --task-color: #b96b08;
+  --task-background: #fffaf1;
+}
+
+.task-card.completed {
+  --task-color: #15803d;
+  --task-background: #f4fbf6;
+}
+
+.task-card.skipped {
+  --task-color: #be3455;
+  --task-background: #fff7f9;
+}
+
+/*
+ * Analytics/adaptation panels are visually secondary to the core plan.
+ */
+.planner-side-column h2 {
+  font-size: 1.14rem;
+}
+
+.planner-side-column h3 {
+  font-size: 0.96rem;
+}
+
+.kaizen-insight {
+  background: #f5f9fe;
+  border-color: #d1dfed;
+}
+
+/*
+ * Responsive collapse. Tablet/mobile retain the established accessible
+ * single-column workflow.
+ */
+@media (max-width: 1100px) {
+  .app-container {
+    width: min(100% - 30px, 1120px);
+  }
+
+  .planner-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .planner-side-column {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .planner-side-column > * {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-container,
+  .auth-container {
+    width: min(100% - 20px, 760px);
+    padding-top: 14px;
+  }
+
+  .main-header {
+    padding: 22px 20px;
+  }
+
+  .planner-side-column {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* Dashboard redesign v2: compact KaizenAI workspace */
+
+:root {
+  --kaizen-sky: #b9e7ff;
+  --kaizen-sky-soft: #eef9ff;
+  --kaizen-sky-pale: #f7fcff;
+  --kaizen-blue: #1769aa;
+  --kaizen-blue-dark: #0f416d;
+  --kaizen-ink: #10243a;
+  --kaizen-muted: #62768a;
+  --kaizen-line: #d7e7f2;
+}
+
+/*
+ * Global workspace
+ */
+body {
+  background: #f4f9fd;
+}
+
+.app-container {
+  width: min(1440px, calc(100% - 44px));
+  padding-bottom: 44px;
+}
+
+/*
+ * Keep the existing header because it already reads well.
+ * Only tighten the transition into the dashboard.
+ */
+.main-header {
+  margin-bottom: 14px;
+}
+
+.goal-selector-card {
+  margin-bottom: 14px;
+}
+
+/*
+ * Balanced two-column dashboard:
+ * - left: learning plan, progress, generated tasks
+ * - right: analytics, adaptive estimation, availability
+ *
+ * Tasks now live inside the left column, eliminating the large blank area
+ * created by the previous full-width-after-grid arrangement.
+ */
+.planner-dashboard-grid {
+  grid-template-columns:
+    minmax(0, 1.45fr)
+    minmax(390px, 0.82fr);
+  gap: 16px;
+}
+
+.planner-main-column,
+.planner-side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.planner-main-column > *,
+.planner-side-column > * {
+  margin-bottom: 0 !important;
+}
+
+.tasks-panel {
+  margin-top: 0 !important;
+}
+
+/*
+ * Less generic "AI dashboard" styling:
+ * flatter cards, thinner borders, restrained radius, almost no floating.
+ */
+.card,
+.progress-dashboard {
+  padding: 20px;
+  border: 1px solid var(--kaizen-line);
+  border-radius: 8px;
+  box-shadow:
+    0 1px 3px rgba(26, 69, 103, 0.055);
+}
+
+.card:hover,
+.progress-dashboard:hover {
+  border-color: #c6ddeb;
+}
+
+button,
+input,
+select,
+textarea {
+  border-radius: 6px;
+}
+
+button:hover:not(:disabled) {
+  transform: none;
+}
+
+/*
+ * The user's chosen #b9e7ff works best as an accent/surface rather than
+ * button text colour. Darker blue provides accessible contrast.
+ */
+button:not(.danger-button),
+.primary-action {
+  border-color: #8accef;
+}
+
+button:not(.danger-button):not(.secondary-button),
+.primary-action {
+  color: #ffffff;
+  background: var(--kaizen-blue);
+}
+
+button:not(.danger-button):not(.secondary-button):hover,
+.primary-action:hover {
+  background: #12598f;
+}
+
+.secondary-button {
+  color: var(--kaizen-blue-dark);
+  background: var(--kaizen-sky-soft);
+  border-color: #a8d9f3;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #5eb5e6;
+  box-shadow:
+    0 0 0 3px rgba(185, 231, 255, 0.72);
+}
+
+/*
+ * Goal summary: reduce the huge white blank area and give the raw plan
+ * information a clearer hierarchy without changing its content.
+ */
+.planner-main-column > .card:first-child {
+  padding: 20px 22px;
+  border-top: 3px solid #69bde9;
+  background:
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #fbfdff 100%
+    );
+}
+
+.planner-main-column > .card:first-child h2 {
+  margin: 0 0 14px;
+  color: var(--kaizen-ink);
+  font-size: 1.3rem;
+}
+
+.planner-main-column > .card:first-child h3 {
+  margin-top: 18px;
+  margin-bottom: 8px;
+  color: var(--kaizen-blue-dark);
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.035em;
+}
+
+.planner-main-column > .card:first-child p {
+  margin: 7px 0;
+}
+
+.planner-main-column > .card:first-child ol,
+.planner-main-column > .card:first-child ul {
+  margin: 7px 0 0;
+  padding-left: 22px;
+}
+
+.planner-main-column > .card:first-child li {
+  margin: 4px 0;
+  line-height: 1.45;
+}
+
+/*
+ * Progress panel
+ */
+.progress-dashboard {
+  border-top: 3px solid #7ccaf1;
+}
+
+.progress-bar-track {
+  background: #e9f6fd;
+}
+
+.progress-bar-fill {
+  background: #3a9ed5;
+  box-shadow: none;
+}
+
+.progress-stat-card,
+.analytics-stat,
+.analytics-comparison > div,
+.task-count-grid > div {
+  background: #f8fcff;
+  border: 1px solid #dceaf4;
+  border-radius: 7px;
+}
+
+/*
+ * ANALYTICS
+ *
+ * The old panel had many equally-weighted little boxes, so users had to read
+ * everything to understand the important story. This creates a clearer visual
+ * order:
+ *   1. four headline metrics
+ *   2. planned vs actual comparison
+ *   3. task-state chips
+ *   4. one highlighted Kaizen recommendation
+ *   5. topic detail
+ */
+.planner-side-column > .card:first-child {
+  position: relative;
+  overflow: hidden;
+  border-top: 3px solid #49a9dc;
+}
+
+.planner-side-column > .card:first-child::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 92px;
+  height: 92px;
+  background: var(--kaizen-sky);
+  opacity: 0.22;
+  border-radius: 0 0 0 100%;
+  pointer-events: none;
+}
+
+.planner-side-column > .card:first-child h2 {
+  margin-bottom: 3px;
+  color: var(--kaizen-ink);
+  font-size: 1.12rem;
+}
+
+.planner-side-column > .card:first-child > p {
+  margin-bottom: 15px;
+  color: var(--kaizen-muted);
+}
+
+/*
+ * Headline metrics: slight tonal variation like a real product dashboard,
+ * while keeping all values readable.
+ */
+.analytics-grid {
+  display: grid !important;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr)) !important;
+  gap: 9px !important;
+}
+
+.analytics-stat {
+  min-height: 82px;
+  padding: 11px 12px !important;
+}
+
+.analytics-stat:nth-child(1) {
+  background: #eaf7ff;
+  border-color: #b9e7ff;
+}
+
+.analytics-stat:nth-child(2) {
+  background: #f2f8ff;
+  border-color: #cddff2;
+}
+
+.analytics-stat:nth-child(3) {
+  background: #eefaf7;
+  border-color: #cce9df;
+}
+
+.analytics-stat:nth-child(4) {
+  background: #fff9ec;
+  border-color: #eee0b6;
+}
+
+.analytics-stat strong,
+.analytics-stat .value,
+.analytics-stat-value {
+  color: var(--kaizen-ink);
+  font-size: 1.18rem !important;
+  line-height: 1.15;
+}
+
+.analytics-stat small,
+.analytics-stat span:first-child {
+  color: var(--kaizen-muted);
+}
+
+/*
+ * Planned vs actual: presented as one comparison strip rather than three
+ * disconnected cards.
+ */
+.analytics-comparison {
+  display: grid !important;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr)) !important;
+  gap: 0 !important;
+  margin-top: 10px !important;
+  overflow: hidden;
+  border: 1px solid #d8e7f1;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.analytics-comparison > div {
+  padding: 10px !important;
+  background: #ffffff !important;
+  border: 0 !important;
+  border-right: 1px solid #e3edf4 !important;
+  border-radius: 0 !important;
+}
+
+.analytics-comparison > div:last-child {
+  border-right: 0 !important;
+  background: #eef8ff !important;
+}
+
+/*
+ * Task state counts become compact pills instead of another card grid.
+ */
+.task-count-grid {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 6px !important;
+  margin: 10px 0 0 !important;
+}
+
+.task-count-grid > div {
+  min-width: 0 !important;
+  padding: 5px 9px !important;
+  background: #f5f9fc !important;
+  border-radius: 999px !important;
+  font-size: 0.72rem;
+}
+
+/*
+ * Kaizen recommendation is now the obvious interpretation layer.
+ */
+.kaizen-insight {
+  position: relative;
+  margin-top: 12px !important;
+  padding: 13px 14px 13px 17px !important;
+  color: var(--kaizen-ink);
+  background: #eaf7ff !important;
+  border: 1px solid #b9e7ff !important;
+  border-left: 4px solid #399ed4 !important;
+  border-radius: 7px !important;
+}
+
+.kaizen-insight::before {
+  content: "KAIZEN";
+  display: block;
+  margin-bottom: 5px;
+  color: #1769aa;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+}
+
+.kaizen-insight strong {
+  color: var(--kaizen-blue-dark);
+}
+
+/*
+ * Feedback/topic rows: less boxed, more table-like.
+ */
+.feedback-by-topic,
+.topic-feedback-list {
+  margin-top: 14px;
+}
+
+.feedback-by-topic > div,
+.topic-feedback-list > div {
+  padding: 9px 2px;
+  border-bottom: 1px solid #e4eef5;
+}
+
+.feedback-by-topic > div:last-child,
+.topic-feedback-list > div:last-child {
+  border-bottom: 0;
+}
+
+/*
+ * Adaptive estimation and availability are supporting tools, so visually
+ * soften them beneath analytics instead of making every section equally loud.
+ */
+.planner-side-column > *:not(:first-child) {
+  background: #ffffff;
+}
+
+.planner-side-column > *:not(:first-child) h2 {
+  color: var(--kaizen-blue-dark);
+}
+
+.ai-review-banner,
+.ai-planning-intro {
+  background: var(--kaizen-sky-soft);
+  border-color: #aeddf6;
+}
+
+/*
+ * Availability: keep it compact in the side column.
+ */
+.planner-side-column .availability-grid {
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.planner-side-column .availability-row {
+  padding: 8px;
+}
+
+/*
+ * Tasks: use available left-column width efficiently and keep status easy
+ * to scan. No unnecessary giant gaps.
+ */
+.tasks-panel .task-list,
+.tasks-panel .tasks-list {
+  display: grid;
+  gap: 9px;
+}
+
+.tasks-panel .task-card {
+  margin: 0;
+  padding: 13px 14px;
+}
+
+/*
+ * On wider desktop displays keep the composition dense rather than expanding
+ * cards indefinitely.
+ */
+@media (min-width: 1500px) {
+  .app-container {
+    width: min(1480px, calc(100% - 56px));
+  }
+}
+
+@media (max-width: 1150px) {
+  .planner-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .planner-main-column,
+  .planner-side-column {
+    gap: 14px;
+  }
+
+  .planner-side-column {
+    display: grid;
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .planner-side-column > .card:first-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-container {
+    width: min(100% - 20px, 760px);
+  }
+
+  .planner-side-column {
+    display: flex;
+  }
+
+  .analytics-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .analytics-comparison {
+    grid-template-columns: 1fr !important;
+  }
+
+  .analytics-comparison > div {
+    border-right: 0 !important;
+    border-bottom: 1px solid #e3edf4 !important;
+  }
+
+  .analytics-comparison > div:last-child {
+    border-bottom: 0 !important;
+  }
+}
+
+
+/* Final dashboard polish: balanced KaizenAI workspace */
+
+/*
+ * Overall balance
+ */
+.planner-dashboard-grid {
+  grid-template-columns:
+    minmax(0, 1.35fr)
+    minmax(420px, 0.78fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.planner-main-column,
+.planner-side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dashboard-wide-panel {
+  margin-top: 14px;
+}
+
+.dashboard-wide-panel > * {
+  margin-bottom: 0 !important;
+}
+
+/*
+ * GOAL OVERVIEW
+ */
+.planner-main-column > .card:first-child {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(0, 1.25fr);
+  column-gap: 16px;
+  row-gap: 10px;
+  padding: 20px;
+  background:
+    linear-gradient(
+      145deg,
+      #ffffff 0%,
+      #f8fcff 100%
+    );
+  border-top: 3px solid #69bde9;
+}
+
+.planner-main-column
+  > .card:first-child
+  > h2 {
+  grid-column: 1 / -1;
+  margin: 0 0 2px;
+  color: #10243a;
+  font-size: 1.3rem;
+  letter-spacing: -0.02em;
+}
+
+.planner-main-column
+  > .card:first-child
+  > p {
+  margin: 0;
+  padding: 10px 12px;
+  background: #eef9ff;
+  border: 1px solid #c9e9fa;
+  border-radius: 7px;
+  color: #38526b;
+}
+
+.planner-main-column
+  > .card:first-child
+  > p:first-of-type {
+  grid-column: 1;
+}
+
+.planner-main-column
+  > .card:first-child
+  > p:nth-of-type(2) {
+  grid-column: 2;
+}
+
+.planner-main-column
+  > .card:first-child
+  > p strong {
+  color: #153a59;
+}
+
+.planner-main-column
+  > .card:first-child
+  > h3 {
+  margin: 5px 0 -2px;
+  color: #1d5f90;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.planner-main-column
+  > .card:first-child
+  > h3:nth-of-type(1) {
+  grid-column: 1;
+  grid-row: 3;
+}
+
+.planner-main-column
+  > .card:first-child
+  > h3:nth-of-type(2) {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.planner-main-column
+  > .card:first-child
+  > ol {
+  grid-column: 1;
+  grid-row: 4;
+}
+
+.planner-main-column
+  > .card:first-child
+  > ul {
+  grid-column: 2;
+  grid-row: 4;
+}
+
+.planner-main-column
+  > .card:first-child
+  > ol,
+.planner-main-column
+  > .card:first-child
+  > ul {
+  min-height: 96px;
+  margin: 0;
+  padding: 12px 14px 12px 34px;
+  background: #ffffff;
+  border: 1px solid #dcebf5;
+  border-radius: 7px;
+}
+
+.planner-main-column
+  > .card:first-child
+  > ol li,
+.planner-main-column
+  > .card:first-child
+  > ul li {
+  margin: 5px 0;
+  line-height: 1.45;
+}
+
+/*
+ * GOAL PROGRESS
+ */
+.progress-dashboard {
+  background:
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #fbfdff 100%
+    );
+}
+
+.progress-stat-grid {
+  gap: 10px;
+}
+
+.progress-stat-card {
+  padding: 14px;
+  background: #f7fcff;
+  border-color: #d6e9f5;
+}
+
+.progress-stat-card:nth-child(1) {
+  background: #eef9ff;
+  border-color: #b9e7ff;
+}
+
+.progress-stat-card:nth-child(2) {
+  background: #f1f8ff;
+}
+
+.progress-stat-card:nth-child(3) {
+  background: #f7fbff;
+}
+
+.progress-stat-card:nth-child(4) {
+  background: #eef7fd;
+}
+
+/*
+ * LEARNING ANALYTICS
+ */
+.planner-side-column > .card:first-child {
+  padding: 20px;
+  background: #ffffff;
+  border-top: 3px solid #4da9dc;
+}
+
+.planner-side-column
+  > .card:first-child
+  .section-header {
+  margin-bottom: 14px;
+}
+
+.analytics-grid {
+  gap: 10px !important;
+}
+
+.analytics-stat {
+  position: relative;
+  min-height: 92px;
+  padding: 12px 13px !important;
+  overflow: hidden;
+}
+
+.analytics-stat::after {
+  content: "";
+  position: absolute;
+  right: -14px;
+  bottom: -22px;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: rgba(185, 231, 255, 0.38);
+  pointer-events: none;
+}
+
+.analytics-stat:nth-child(1) {
+  background: #eaf8ff;
+  border-color: #b9e7ff;
+}
+
+.analytics-stat:nth-child(2) {
+  background: #f0f7ff;
+  border-color: #c9dff1;
+}
+
+.analytics-stat:nth-child(3) {
+  background: #edf9f6;
+  border-color: #c9e8df;
+}
+
+.analytics-stat:nth-child(4) {
+  background: #fff8eb;
+  border-color: #ecdcb0;
+}
+
+.analytics-stat strong,
+.analytics-stat-value,
+.analytics-stat .value {
+  position: relative;
+  z-index: 1;
+  display: block;
+  margin-top: 4px;
+  color: #10243a;
+  font-size: 1.25rem !important;
+  letter-spacing: -0.025em;
+}
+
+.analytics-stat small,
+.analytics-stat span {
+  position: relative;
+  z-index: 1;
+}
+
+.analytics-comparison {
+  margin-top: 11px !important;
+  background: #f8fbfe;
+  border-color: #d7e6f1;
+}
+
+.analytics-comparison > div {
+  min-height: 70px;
+}
+
+.analytics-comparison > div:last-child {
+  background: #eaf7ff !important;
+}
+
+.task-count-grid {
+  margin-top: 10px !important;
+}
+
+.task-count-grid > div {
+  color: #38536c;
+  background: #f6faff !important;
+  border-color: #d7e6f2 !important;
+}
+
+.kaizen-insight {
+  margin-top: 14px !important;
+  padding: 15px 16px !important;
+  background:
+    linear-gradient(
+      135deg,
+      #e9f7ff 0%,
+      #f4fbff 100%
+    ) !important;
+  border-color: #b9e7ff !important;
+  border-left: 4px solid #2d98d0 !important;
+}
+
+.kaizen-insight::before {
+  content: "KAIZEN INSIGHT";
+  margin-bottom: 6px;
+  color: #1769aa;
+}
+
+.feedback-by-topic > div,
+.topic-feedback-list > div {
+  padding: 10px 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #e4eef5;
+  border-radius: 0;
+}
+
+.feedback-by-topic > div:last-child,
+.topic-feedback-list > div:last-child {
+  border-bottom: 0;
+}
+
+/*
+ * ADAPTIVE ESTIMATION
+ */
+.planner-side-column
+  > *:nth-child(2) {
+  background:
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #fbfdff 100%
+    );
+}
+
+.planner-side-column
+  > *:nth-child(2)
+  button:disabled {
+  opacity: 0.48;
+  box-shadow: none;
+}
+
+/*
+ * FULL-WIDTH ADAPTIVE AVAILABILITY
+ */
+.dashboard-availability-panel > .card {
+  padding: 20px;
+  border-top: 3px solid #79c7ed;
+  background:
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #fbfdff 100%
+    );
+}
+
+.dashboard-availability-panel
+  .availability-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(7, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.dashboard-availability-panel
+  .availability-row {
+  min-width: 0;
+  padding: 10px;
+  background: #f8fcff;
+  border: 1px solid #d7e8f3;
+  border-radius: 7px;
+}
+
+.dashboard-availability-panel
+  .availability-row.selected {
+  background: #eaf7ff;
+  border-color: #9bd6f5;
+  box-shadow:
+    inset 0 0 0 1px #b9e7ff;
+}
+
+.dashboard-availability-panel
+  .availability-row label {
+  min-width: 0;
+}
+
+.dashboard-availability-panel
+  .availability-row input[type="number"] {
+  width: 100%;
+  min-width: 0;
+}
+
+.dashboard-availability-panel
+  .feasibility-preview,
+.dashboard-availability-panel
+  .availability-preview {
+  margin-top: 12px;
+}
+
+/*
+ * FULL-WIDTH TASKS
+ */
+.tasks-panel {
+  margin-top: 14px !important;
+  border-top: 3px solid #5fb5e2;
+}
+
+.tasks-panel
+  .section-header {
+  margin-bottom: 12px;
+}
+
+.tasks-panel .task-card {
+  padding: 13px 15px;
+}
+
+@media (max-width: 1200px) {
+  .planner-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-availability-panel
+    .availability-grid {
+    grid-template-columns:
+      repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .planner-main-column
+    > .card:first-child {
+    display: block;
+  }
+
+  .planner-main-column
+    > .card:first-child
+    > p {
+    margin-top: 8px;
+  }
+
+  .planner-main-column
+    > .card:first-child
+    > h3 {
+    margin-top: 16px;
+  }
+
+  .planner-main-column
+    > .card:first-child
+    > ol,
+  .planner-main-column
+    > .card:first-child
+    > ul {
+    min-height: 0;
+  }
+
+  .dashboard-availability-panel
+    .availability-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+
+/* Final layout v3: compact analytics + full-width adaptation controls */
+
+/*
+ * Top dashboard:
+ * left = goal overview + progress
+ * right = analytics only
+ *
+ * With Adaptive Estimation moved out, both columns are now close enough in
+ * height that the large dead-space gap disappears.
+ */
+.planner-dashboard-grid {
+  grid-template-columns:
+    minmax(0, 1.42fr)
+    minmax(390px, 0.78fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.planner-side-column {
+  align-self: start;
+}
+
+/*
+ * Keep Learning Analytics dense and easy to scan.
+ */
+.planner-side-column > .card:first-child {
+  padding: 18px;
+}
+
+.planner-side-column
+  > .card:first-child
+  .analytics-grid {
+  gap: 8px !important;
+}
+
+.planner-side-column
+  > .card:first-child
+  .analytics-stat {
+  min-height: 78px;
+  padding: 10px 11px !important;
+}
+
+.planner-side-column
+  > .card:first-child
+  .analytics-stat strong,
+.planner-side-column
+  > .card:first-child
+  .analytics-stat-value,
+.planner-side-column
+  > .card:first-child
+  .analytics-stat .value {
+  font-size: 1.12rem !important;
+}
+
+.planner-side-column
+  > .card:first-child
+  .analytics-comparison {
+  margin-top: 8px !important;
+}
+
+.planner-side-column
+  > .card:first-child
+  .analytics-comparison > div {
+  min-height: 60px;
+  padding: 8px !important;
+}
+
+.planner-side-column
+  > .card:first-child
+  .task-count-grid {
+  margin-top: 8px !important;
+}
+
+.planner-side-column
+  > .card:first-child
+  .kaizen-insight {
+  margin-top: 10px !important;
+  padding: 12px 13px !important;
+}
+
+.planner-side-column
+  > .card:first-child
+  .feedback-by-topic,
+.planner-side-column
+  > .card:first-child
+  .topic-feedback-list {
+  margin-top: 10px;
+}
+
+/*
+ * Adaptive Estimation works better as a full-width decision strip than as a
+ * tall sidebar. Existing component content is unchanged.
+ */
+.dashboard-estimation-panel {
+  margin-top: 14px;
+}
+
+.dashboard-estimation-panel > * {
+  width: 100%;
+  margin-bottom: 0 !important;
+}
+
+.dashboard-estimation-panel > .card {
+  padding: 18px 20px;
+  border-top: 3px solid #66b9e4;
+  background:
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #fbfdff 100%
+    );
+}
+
+.dashboard-estimation-panel
+  .metric-grid,
+.dashboard-estimation-panel
+  .adaptive-metrics-grid {
+  display: grid !important;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+.dashboard-estimation-panel
+  .metric-grid > div,
+.dashboard-estimation-panel
+  .adaptive-metrics-grid > div,
+.dashboard-estimation-panel
+  .adaptive-metric {
+  min-width: 0;
+  padding: 10px !important;
+  background: #f7fbff;
+  border: 1px solid #d8e8f3;
+  border-radius: 7px;
+}
+
+.dashboard-estimation-panel
+  button:disabled {
+  opacity: 0.45;
+}
+
+/*
+ * ADAPTIVE AVAILABILITY
+ *
+ * Seven tiny cards in one row were too cramped. A 4+3 layout reads more like
+ * a weekly planning control and keeps inputs comfortably sized.
+ */
+.dashboard-availability-panel {
+  margin-top: 14px;
+}
+
+.dashboard-availability-panel > .card {
+  padding: 18px 20px;
+}
+
+.dashboard-availability-panel
+  .availability-grid {
+  display: grid !important;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+
+.dashboard-availability-panel
+  .availability-row {
+  min-height: 72px;
+  padding: 10px 11px !important;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(78px, 104px);
+  gap: 8px;
+  align-items: center;
+}
+
+.dashboard-availability-panel
+  .availability-row
+  .checkbox-label {
+  min-width: 0;
+}
+
+.dashboard-availability-panel
+  .availability-row
+  input[type="number"] {
+  width: 100%;
+  min-width: 0;
+}
+
+/*
+ * Make the feasibility preview a compact horizontal summary rather than a
+ * large green block with unused space.
+ */
+.dashboard-availability-panel
+  .feasibility-preview,
+.dashboard-availability-panel
+  .availability-preview {
+  display: grid;
+  grid-template-columns:
+    minmax(240px, 1.2fr)
+    minmax(0, 2fr);
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 13px 14px;
+}
+
+.dashboard-availability-panel
+  .feasibility-preview
+  .metric-grid,
+.dashboard-availability-panel
+  .availability-preview
+  .metric-grid {
+  display: grid !important;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+/*
+ * If the component has an actions row, keep it right-aligned and compact.
+ */
+.dashboard-availability-panel
+  .availability-actions,
+.dashboard-availability-panel
+  .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/*
+ * Tasks remain full width.
+ */
+.tasks-panel {
+  margin-top: 14px !important;
+}
+
+/*
+ * Responsive behaviour.
+ */
+@media (max-width: 1200px) {
+  .planner-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-estimation-panel
+    .metric-grid,
+  .dashboard-estimation-panel
+    .adaptive-metrics-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .dashboard-availability-panel
+    .availability-grid {
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboard-estimation-panel
+    .metric-grid,
+  .dashboard-estimation-panel
+    .adaptive-metrics-grid,
+  .dashboard-availability-panel
+    .availability-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .dashboard-availability-panel
+    .availability-row {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-availability-panel
+    .feasibility-preview,
+  .dashboard-availability-panel
+    .availability-preview {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Final privacy, cookie and AI transparency disclosure */
+.privacy-notice {
+  margin-top: 1.25rem;
+  border: 1px solid #c8dced;
+  border-radius: 16px;
+  background: #f7fbff;
+  overflow: hidden;
+}
+
+.privacy-notice details {
+  width: 100%;
+}
+
+.privacy-notice summary {
+  cursor: pointer;
+  padding: 1rem 1.1rem;
+  font-weight: 700;
+  color: #17365d;
+  background: #eaf7ff;
+}
+
+.privacy-notice summary:focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: -4px;
+}
+
+.privacy-notice-content {
+  padding: 0 1.1rem 1.15rem;
+}
+
+.privacy-notice-content h2 {
+  margin-bottom: 0.4rem;
+}
+
+.privacy-notice-content h3 {
+  margin-bottom: 0.35rem;
+  font-size: 1rem;
+}
+
+.privacy-notice-content p {
+  margin-top: 0.35rem;
+  line-height: 1.55;
+}
+
+.privacy-notice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.privacy-notice-grid > section,
+.privacy-prototype-note {
+  border: 1px solid #d9e7f2;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 0.9rem;
+}
+
+.privacy-prototype-note {
+  margin-top: 0.9rem;
+}
+
+.privacy-notice code {
+  font-size: 0.9em;
+}
+
+@media (max-width: 720px) {
+  .privacy-notice-grid {
+    grid-template-columns: 1fr;
+  }
+}

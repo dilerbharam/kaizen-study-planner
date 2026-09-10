@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import "./App.css";
+import PrivacyNotice from "./components/PrivacyNotice";
 import api from "./services/api";
 import AuthForm from "./components/AuthForm";
 import GoalSetupForm from "./components/GoalSetupForm";
@@ -36,7 +37,21 @@ async function fetchPlannerData() {
     };
   }
 
-  const initialGoalId = loadedGoals[0].id;
+  const storedGoalId =
+    window.localStorage.getItem("kaizen_selected_goal_id");
+
+  const restoredGoal = loadedGoals.find(
+    (goal) =>
+      String(goal.id) === storedGoalId
+  );
+
+  const initialGoalId =
+    restoredGoal?.id ?? loadedGoals[0].id;
+
+  window.localStorage.setItem(
+    "kaizen_selected_goal_id",
+    String(initialGoalId)
+  );
 
   const [
     goalDetailsResponse,
@@ -95,7 +110,21 @@ function App() {
     useState("");
 
   const [showSetupForm, setShowSetupForm] =
-    useState(false);
+    useState(
+      () =>
+        window.sessionStorage.getItem(
+          "kaizen_current_view"
+        ) === "create-goal"
+    );
+
+  useEffect(() => {
+    window.sessionStorage.setItem(
+      "kaizen_current_view",
+      showSetupForm
+        ? "create-goal"
+        : "planner"
+    );
+  }, [showSetupForm]);
 
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] =
@@ -230,8 +259,15 @@ function App() {
       if (
         error.response?.status === 401
       ) {
-        setCurrentUser(null);
-        resetPlannerState();
+        window.localStorage.removeItem(
+      "kaizen_selected_goal_id"
+    );
+    window.sessionStorage.removeItem(
+      "kaizen_current_view"
+    );
+
+    setCurrentUser(null);
+    resetPlannerState();
         return;
       }
 
@@ -263,6 +299,10 @@ function App() {
     );
 
     setSelectedGoalId(goalId);
+    window.localStorage.setItem(
+      "kaizen_selected_goal_id",
+      String(goalId)
+    );
     setMessage("");
     setProgressData(null);
     setProgressError("");
@@ -279,6 +319,10 @@ function App() {
 
       setGoals(updatedGoals);
       setSelectedGoalId(goalId);
+      window.localStorage.setItem(
+        "kaizen_selected_goal_id",
+        String(goalId)
+      );
       setShowSetupForm(false);
 
       await loadSelectedGoal(goalId);
@@ -519,7 +563,7 @@ function App() {
   if (isLoading) {
     return (
       <main className="app-container">
-        <h1>Kaizen Study Planner</h1>
+        <h1>KaizenAI</h1>
         <p>Loading planner data...</p>
       </main>
     );
@@ -539,11 +583,11 @@ function App() {
     <main className="app-container">
       <header className="main-header">
         <div>
-          <h1>Kaizen Study Planner</h1>
+          <h1>KaizenAI</h1>
 
           <p className="subtitle">
-            Adaptive micro-task planner for
-            structured learning
+            Adaptive study planning through
+            continuous improvement
           </p>
 
           <p>
@@ -640,6 +684,8 @@ function App() {
             </section>
           )}
 
+          <div className="planner-dashboard-grid">
+            <div className="planner-main-column">
           {goalDetails && (
             <section className="card">
               <h2>
@@ -700,36 +746,27 @@ function App() {
               error={progressError}
             />
           )}
+
+
+          </div>
+
+            <aside
+              className="planner-side-column"
+              aria-label="Planning insights and controls"
+            >
           {selectedGoalId && (
             <LearningAnalytics
               goalId={selectedGoalId}
               tasks={tasks}
             />
           )}
-          {selectedGoalId && (
-            <AdaptiveEstimation
-              goalId={selectedGoalId}
-              tasks={tasks}
-              onPlannerChanged={
-                refreshGoalData
-              }
-            />
-          )}
-          {selectedGoalId && goalDetails && (
-            <AvailabilityManager
-              goalId={selectedGoalId}
-              targetDate={
-                goalDetails.goal.target_date
-              }
-              progressData={progressData}
-              onPlannerChanged={
-                refreshGoalData
-              }
-            />
-          )}
 
-          {selectedGoalId && (
-            <section className="card">
+
+            </aside>
+          </div>
+
+                    {selectedGoalId && (
+            <section className="card tasks-panel">
               <div className="section-header">
                 <h2>
                   Generated Daily Tasks
@@ -865,8 +902,42 @@ function App() {
               )}
             </section>
           )}
+
+<div className="dashboard-wide-panel dashboard-estimation-panel">
+{selectedGoalId && (
+            <AdaptiveEstimation
+              goalId={selectedGoalId}
+              tasks={tasks}
+              onPlannerChanged={
+                refreshGoalData
+              }
+            />
+          )}
+          </div>
+
+<div className="dashboard-wide-panel dashboard-availability-panel">
+{selectedGoalId && goalDetails && (
+            <AvailabilityManager
+              goalId={selectedGoalId}
+              targetDate={
+                goalDetails.goal.target_date
+              }
+              progressData={progressData}
+              onPlannerChanged={
+                refreshGoalData
+              }
+            />
+          )}
+
+          </div>
+
+
+
+
+
         </>
       )}
+          <PrivacyNotice />
     </main>
   );
 }
