@@ -37,7 +37,7 @@ function PrivacyNotice() {
               <p>
                 A first-party HTTP-only authentication cookie named
                 <code> kaizen_auth </code>
-                is used to keep an authenticated session secure.
+                is used to maintain an authenticated session.
                 The browser also stores the selected goal and limited interface state to improve continuity across refreshes. These values do not contain passwords or API keys.
               </p>
               <p>
